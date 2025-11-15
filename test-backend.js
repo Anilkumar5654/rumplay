@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://moviedbr.com';
+const API_URL = 'https://moviedbr.com';
+const API_ROOT_ENDPOINT = 'https://moviedbr.com/';
+const API_HEALTH_ENDPOINT = 'https://moviedbr.com/api/health';
+const API_TRPC_ENDPOINT = 'https://moviedbr.com/api/trpc';
 
 console.log('='.repeat(60));
 console.log('Backend Connectivity Test');
@@ -40,9 +43,9 @@ async function runTests() {
   console.log(`API Base URL: ${API_URL}\n`);
   
   const results = {
-    root: await testEndpoint('Root Endpoint', `${API_URL}/`),
-    health: await testEndpoint('Health Check', `${API_URL}/api/health`),
-    trpc: await testEndpoint('tRPC Endpoint', `${API_URL}/api/trpc`),
+    root: await testEndpoint('Root Endpoint', API_ROOT_ENDPOINT),
+    health: await testEndpoint('Health Check', API_HEALTH_ENDPOINT),
+    trpc: await testEndpoint('tRPC Endpoint', API_TRPC_ENDPOINT),
   };
   
   console.log('='.repeat(60));

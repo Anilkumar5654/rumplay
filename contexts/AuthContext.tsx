@@ -10,17 +10,13 @@ import { trpcClient, setTrpcAuthToken } from "../lib/trpc";
 const AUTH_USER_KEY = "rork_auth_user";
 const AUTH_TOKEN_KEY = "rork_auth_token";
 
-const rawApi = process.env.EXPO_PUBLIC_API_URL;
-if (typeof rawApi !== "string" || rawApi.trim().length === 0) {
-  throw new Error("Backend URL not configured");
-}
-const API = rawApi.trim().replace(/\/+$/, "");
+const API_ROOT = "https://moviedbr.com/api";
 
 const AUTH_ENDPOINTS = {
-  login: `${API}/api/auth/login`,
-  register: `${API}/api/auth/register`,
-  me: `${API}/api/auth/me`,
-  logout: `${API}/api/auth/logout`,
+  login: `${API_ROOT}/auth/login`,
+  register: `${API_ROOT}/auth/register`,
+  me: `${API_ROOT}/auth/me`,
+  logout: `${API_ROOT}/auth/logout`,
 } as const;
 
 const secureStoreAvailable = Platform.OS !== "web" && typeof SecureStore.getItemAsync === "function";
@@ -141,7 +137,7 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
 
 const resolveAuthErrorMessage = (error: unknown): string => {
   console.log("[AuthContext] resolveAuthErrorMessage", error);
-  const apiUrl = API;
+  const apiUrl = API_ROOT;
 
   if (error instanceof TRPCClientError) {
     const dataMessage = typeof error.data?.message === "string" ? error.data.message : null;
