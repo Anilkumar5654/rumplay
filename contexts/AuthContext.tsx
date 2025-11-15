@@ -2,6 +2,7 @@ import { TRPCClientError } from "@trpc/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Platform } from "react-native";
 import type { User, UserRole } from "../types";
@@ -14,8 +15,35 @@ let hasLoggedMissingApiBase = false;
 
 const ensureLeadingSlash = (path: string) => (path.startsWith("/") ? path : `/${path}`);
 
+type GlobalEnv = typeof globalThis & {
+  EXPO_PUBLIC_API_URL?: string;
+  __env?: Record<string, string>;
+  __rorkEnv?: Record<string, string>;
+  __APP_ENV__?: Record<string, string>;
+};
+
+const resolveApiBaseFromGlobals = (): string | undefined => {
+  if (typeof globalThis === "undefined") {
+    return undefined;
+  }
+  const globalEnv = globalThis as GlobalEnv;
+  return (
+    globalEnv.EXPO_PUBLIC_API_URL ??
+    globalEnv.__rorkEnv?.EXPO_PUBLIC_API_URL ??
+    globalEnv.__env?.EXPO_PUBLIC_API_URL ??
+    globalEnv.__APP_ENV__?.EXPO_PUBLIC_API_URL
+  );
+};
+
 const getEnvApiBaseUrl = (): string => {
-  const api = process.env.EXPO_PUBLIC_API_URL?.trim();
+  const envValue =
+    (typeof process !== "undefined" ? process.env?.EXPO_PUBLIC_API_URL : undefined) ??
+    resolveApiBaseFromGlobals() ??
+    Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL ??
+    Constants.expoConfig?.extra?.apiUrl ??
+    Constants.expoConfig?.extra?.apiBaseUrl;
+
+  const api = envValue?.trim();
   if (!api) {
     if (!hasLoggedMissingApiBase) {
       console.error("AuthContext missing EXPO_PUBLIC_API_URL environment variable. Set it in app config.");
