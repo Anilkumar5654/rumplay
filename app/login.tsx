@@ -26,20 +26,30 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields.');
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
+      setFormError('Please fill in all fields.');
+      return;
+    }
+
+    if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+      setFormError('Please enter a valid email address.');
       return;
     }
 
     console.log('[LoginScreen] Starting login...');
     setIsLoading(true);
-    const normalizedEmail = email.trim().toLowerCase();
+    setFormError(null);
+    const normalizedEmail = trimmedEmail.toLowerCase();
     console.log('[LoginScreen] Calling login with email:', normalizedEmail);
     
     try {
-      const result = await login(normalizedEmail, password);
+      const result = await login(normalizedEmail, trimmedPassword);
       console.log('[LoginScreen] Login result:', result.success ? 'SUCCESS' : 'FAILED');
       setIsLoading(false);
 
@@ -50,12 +60,12 @@ export default function LoginScreen() {
           { text: 'OK', onPress: () => router.replace(destination) }
         ]);
       } else {
-        Alert.alert('Error', result.error || 'Login failed');
+        setFormError(result.error || 'Login failed. Please try again.');
       }
     } catch (error) {
       console.error('[LoginScreen] Unexpected error:', error);
       setIsLoading(false);
-      Alert.alert('Error', 'An unexpected error occurred. Please check the console.');
+      setFormError('Unable to complete login. Please check your connection and try again.');
     }
   };
 
@@ -123,6 +133,10 @@ export default function LoginScreen() {
               <Text style={styles.loginButtonText}>Login</Text>
             )}
           </TouchableOpacity>
+
+          {formError ? (
+            <Text style={styles.errorText} testID="login-error-message">{formError}</Text>
+          ) : null}
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -210,6 +224,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: theme.fontSizes.md,
     fontWeight: 'bold' as const,
+  },
+  errorText: {
+    marginTop: theme.spacing.sm,
+    color: theme.colors.error,
+    fontSize: theme.fontSizes.sm,
+    textAlign: 'center' as const,
   },
   divider: {
     flexDirection: 'row' as const,

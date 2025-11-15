@@ -136,7 +136,8 @@ const guessFromExpoHost = (): string | null => {
   const fallbackPort = explicitPort ?? "8787";
   const normalizedPort = normalizePort(portPart) ?? fallbackPort;
 
-  const protocol = isLocalHost ? "http" : "https";
+  const shouldForceHttp = normalizedPort.length > 0 && normalizedPort !== "443";
+  const protocol = shouldForceHttp || isLocalHost ? "http" : "https";
   const portSegment = normalizedPort.length > 0 ? `:${normalizedPort}` : "";
 
   return sanitizeUrl(`${protocol}://${normalizedHost}${portSegment}`);

@@ -196,8 +196,9 @@ const performAuthMutation = async (path: string, payload: Record<string, unknown
 
     return data;
   } catch (error) {
-    console.error("AuthContext performAuthMutation error", error);
-    throw error;
+    const message = resolveAuthErrorMessage(error);
+    console.error("AuthContext performAuthMutation error", message, error);
+    return { success: false, error: message };
   }
 };
 
@@ -355,11 +356,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         const response = await performAuthMutation("/api/auth/login", { email, password });
 
         if (!response.success) {
-          return { success: false, error: response.error ?? "Invalid login credentials." };
+          const resolvedError = response.error ?? "Invalid login credentials.";
+          setAuthError(resolvedError);
+          return { success: false, error: resolvedError };
         }
 
         if (!response.token || !response.user) {
-          return { success: false, error: "Missing token or user data in response." };
+          const missingDataError = "Missing token or user data in response.";
+          setAuthError(missingDataError);
+          return { success: false, error: missingDataError };
         }
 
         await persistSession(response.token);
@@ -379,6 +384,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       } catch (error) {
         const message = resolveAuthErrorMessage(error);
         console.error("AuthContext login error", message, error);
+        setAuthError(message);
         await clearSession();
         return { success: false, error: message };
       }
@@ -401,11 +407,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         });
 
         if (!response.success) {
-          return { success: false, error: response.error ?? "Registration failed." };
+          const resolvedError = response.error ?? "Registration failed.";
+          setAuthError(resolvedError);
+          return { success: false, error: resolvedError };
         }
 
         if (!response.token || !response.user) {
-          return { success: false, error: "Missing token or user data in response." };
+          const missingDataError = "Missing token or user data in response.";
+          setAuthError(missingDataError);
+          return { success: false, error: missingDataError };
         }
 
         await persistSession(response.token);
@@ -425,6 +435,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       } catch (error) {
         const message = resolveAuthErrorMessage(error);
         console.error("AuthContext register error", message, error);
+        setAuthError(message);
         await clearSession();
         return { success: false, error: message };
       }
