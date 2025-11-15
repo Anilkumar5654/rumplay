@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8787';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://moviedbr.com';
 
 console.log('='.repeat(60));
 console.log('Backend Connectivity Test');

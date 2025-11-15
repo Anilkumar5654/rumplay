@@ -184,9 +184,9 @@ export const getApiBaseUrl = () => {
     return cachedBaseUrl;
   }
 
-  const defaultFallback = sanitizeUrl("http://localhost:8787");
+  const defaultFallback = sanitizeUrl("https://moviedbr.com/");
   console.warn(
-    "Falling back to default API base URL http://localhost:8787. Set EXPO_PUBLIC_API_URL to your backend endpoint for proper configuration."
+    "Falling back to default API base URL https://moviedbr.com/. Set EXPO_PUBLIC_API_URL to your backend endpoint for proper configuration."
   );
   cachedBaseUrl = defaultFallback;
   return cachedBaseUrl;

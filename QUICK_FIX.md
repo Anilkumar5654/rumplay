@@ -15,7 +15,7 @@ node test-backend.js
 
 Or manually:
 ```bash
-curl http://localhost:8787/api/health
+curl https://moviedbr.com/api/health
 ```
 
 **Expected response:**
@@ -31,7 +31,7 @@ If you get an error, the backend is not running!
 
 A `.env` file has been created with:
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:8787
+EXPO_PUBLIC_API_URL=https://moviedbr.com/
 EXPO_PUBLIC_API_PORT=8787
 ```
 
@@ -87,7 +87,7 @@ See `DEMO_CREDENTIALS.md` for all test accounts.
 
 1. **Backend Health:**
    ```bash
-   curl http://localhost:8787/api/health
+   curl https://moviedbr.com/api/health
    ```
 
 2. **Open App:**
@@ -103,7 +103,7 @@ See `DEMO_CREDENTIALS.md` for all test accounts.
 4. **Check Logs:**
    Look for these in console:
    ```
-   [tRPC] Making request to: http://localhost:8787/api/trpc
+   [tRPC] Making request to: https://moviedbr.com/api/trpc
    [tRPC] Response status: 200
    AuthContext login success
    ```

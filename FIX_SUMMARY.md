@@ -12,7 +12,7 @@ The error `TRPCClientError: Unexpected token '<', "<!DOCTYPE "... is not valid J
 ### 1. **Environment Configuration** ✅
 Created `.env` file with backend API URL:
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:8787
+EXPO_PUBLIC_API_URL=https://moviedbr.com/
 EXPO_PUBLIC_API_PORT=8787
 ```
 
@@ -30,7 +30,7 @@ Updated `app/index.tsx` to handle authentication state properly:
 ### 4. **Added Health Check Endpoint** ✅
 Backend now has `/api/health` endpoint to verify it's running:
 ```
-GET http://localhost:8787/api/health
+GET https://moviedbr.com/api/health
 ```
 
 ### 5. **Created Demo Credentials Document** ✅
@@ -44,7 +44,7 @@ Added `DEMO_CREDENTIALS.md` with all test accounts for each role.
 
 Check if your backend is running by visiting:
 ```
-http://localhost:8787/api/health
+https://moviedbr.com/api/health
 ```
 
 If you see JSON response like this, the backend is running:
@@ -76,7 +76,7 @@ When you try to login, look for these logs:
 
 **Good signs (working):**
 ```
-[tRPC] Making request to: http://localhost:8787/api/trpc
+[tRPC] Making request to: https://moviedbr.com/api/trpc
 [tRPC] Response status: 200
 AuthContext login success user-xxx user
 ```
@@ -84,13 +84,13 @@ AuthContext login success user-xxx user
 **Bad signs (not working):**
 ```
 [tRPC] Fetch error: TypeError: Failed to fetch
-AuthContext login error Cannot connect to backend at http://localhost:8787
+AuthContext login error Cannot connect to backend at https://moviedbr.com
 ```
 
 ### Step 4: Platform-Specific Configuration
 
 #### Web Browser
-- Should work automatically with `http://localhost:8787`
+- Should work automatically with `https://moviedbr.com`
 - Check browser console for errors
 
 #### Physical Device (Phone/Tablet)
@@ -116,7 +116,7 @@ EXPO_PUBLIC_API_URL=http://10.0.2.2:8787
 
 #### iOS Simulator
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:8787
+EXPO_PUBLIC_API_URL=https://moviedbr.com/
 ```
 
 ## Demo Login Credentials
@@ -131,13 +131,13 @@ See `DEMO_CREDENTIALS.md` for all test accounts:
 
 1. **Backend Health Check:**
    ```bash
-   curl http://localhost:8787/api/health
+   curl https://moviedbr.com/api/health
    ```
    Should return JSON with status "ok"
 
 2. **tRPC Endpoint:**
    ```bash
-   curl http://localhost:8787/api/trpc
+   curl https://moviedbr.com/api/trpc
    ```
    Should return tRPC response (not HTML error page)
 
@@ -150,10 +150,10 @@ See `DEMO_CREDENTIALS.md` for all test accounts:
 
 ## Common Issues
 
-### Issue: "Cannot connect to backend at http://localhost:8787"
+### Issue: "Cannot connect to backend at https://moviedbr.com"
 
 **Solution:**
-1. Check if backend is running: `curl http://localhost:8787/api/health`
+1. Check if backend is running: `curl https://moviedbr.com/api/health`
 2. If not running, start the backend server
 3. Check if port 8787 is blocked by firewall
 4. Try using `127.0.0.1:8787` instead of `localhost:8787`
@@ -203,6 +203,6 @@ See `DEMO_CREDENTIALS.md` for all test accounts:
 If you're still having issues after following this guide:
 
 1. Check the console logs for `[tRPC]` and `[AuthContext]` messages
-2. Verify backend is running: `http://localhost:8787/api/health`
+2. Verify backend is running: `https://moviedbr.com/api/health`
 3. Share the console error messages
 4. Check your network configuration (firewall, WiFi, etc.)

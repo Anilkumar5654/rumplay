@@ -32,15 +32,15 @@ The backend server needs to be running on port 8787. Make sure you have the foll
 
 ```bash
 # Create .env file in the root directory if not exists
-EXPO_PUBLIC_API_URL=http://localhost:8787
+EXPO_PUBLIC_API_URL=https://moviedbr.com/
 EXPO_PUBLIC_API_PORT=8787
 ```
 
 ### 2. Backend Connection
 
-The app tries to connect to the backend at `http://localhost:8787/api/trpc`. If you're running on:
+The app tries to connect to the backend at `https://moviedbr.com/api/trpc`. If you're running on:
 
-- **Web Browser:** The app will automatically connect to `http://localhost:8787`
+- **Web Browser:** The app will automatically connect to `https://moviedbr.com`
 - **Physical Device:** You need to update the API URL to use your computer's local network IP address:
   ```
   EXPO_PUBLIC_API_URL=http://192.168.x.x:8787
@@ -48,7 +48,7 @@ The app tries to connect to the backend at `http://localhost:8787/api/trpc`. If 
   Replace `192.168.x.x` with your actual local IP address.
 
 - **Android Emulator:** Use `http://10.0.2.2:8787` instead of localhost
-- **iOS Simulator:** `http://localhost:8787` should work
+- **iOS Simulator:** `https://moviedbr.com` should work
 
 ### 3. Common Issues and Fixes
 
