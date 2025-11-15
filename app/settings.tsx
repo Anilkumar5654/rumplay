@@ -174,9 +174,9 @@ export default function SettingsScreen() {
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
               {localSettings.theme === "dark" ? (
-                <Moon color={theme.colors.text} size={24} />
+                <Moon style={styles.settingIcon} color={theme.colors.text} size={24} />
               ) : (
-                <Sun color={theme.colors.text} size={24} />
+                <Sun style={styles.settingIcon} color={theme.colors.text} size={24} />
               )}
               <View>
                 <Text style={styles.settingLabel}>Theme</Text>
@@ -197,7 +197,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Palette color={theme.colors.text} size={24} />
+              <Palette style={styles.settingIcon} color={theme.colors.text} size={24} />
               <Text style={styles.settingLabel}>Accent Color</Text>
             </View>
           </View>
@@ -231,7 +231,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Play color={theme.colors.text} size={24} />
+              <Play style={styles.settingIcon} color={theme.colors.text} size={24} />
               <View>
                 <Text style={styles.settingLabel}>Autoplay Next</Text>
                 <Text style={styles.settingDescription}>
@@ -249,7 +249,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Wifi color={theme.colors.text} size={24} />
+              <Wifi style={styles.settingIcon} color={theme.colors.text} size={24} />
               <View>
                 <Text style={styles.settingLabel}>WiFi Only</Text>
                 <Text style={styles.settingDescription}>
@@ -267,7 +267,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Play color={theme.colors.text} size={24} />
+              <Play style={styles.settingIcon} color={theme.colors.text} size={24} />
               <View>
                 <Text style={styles.settingLabel}>Autoplay on Open</Text>
                 <Text style={styles.settingDescription}>
@@ -285,7 +285,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Minimize2 color={theme.colors.text} size={24} />
+              <Minimize2 style={styles.settingIcon} color={theme.colors.text} size={24} />
               <View>
                 <Text style={styles.settingLabel}>Mini Player</Text>
                 <Text style={styles.settingDescription}>
@@ -303,7 +303,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Music color={theme.colors.text} size={24} />
+              <Music style={styles.settingIcon} color={theme.colors.text} size={24} />
               <View>
                 <Text style={styles.settingLabel}>Background Audio</Text>
                 <Text style={styles.settingDescription}>
@@ -324,7 +324,7 @@ export default function SettingsScreen() {
           {Platform.OS !== "web" && (
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
-                <PictureInPicture color={theme.colors.text} size={24} />
+                <PictureInPicture style={styles.settingIcon} color={theme.colors.text} size={24} />
                 <View>
                   <Text style={styles.settingLabel}>Picture-in-Picture</Text>
                   <Text style={styles.settingDescription}>
@@ -343,7 +343,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Download color={theme.colors.text} size={24} />
+              <Download style={styles.settingIcon} color={theme.colors.text} size={24} />
               <Text style={styles.settingLabel}>Video Quality</Text>
             </View>
           </View>
@@ -378,7 +378,7 @@ export default function SettingsScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Bell color={theme.colors.text} size={24} />
+              <Bell style={styles.settingIcon} color={theme.colors.text} size={24} />
               <View>
                 <Text style={styles.settingLabel}>Enable Notifications</Text>
                 <Text style={styles.settingDescription}>
@@ -400,7 +400,7 @@ export default function SettingsScreen() {
 
           <TouchableOpacity style={styles.settingItem} onPress={handleClearWatchHistory}>
             <View style={styles.settingLeft}>
-              <Trash2 color={theme.colors.error} size={24} />
+              <Trash2 style={styles.settingIcon} color={theme.colors.error} size={24} />
               <Text style={[styles.settingLabel, { color: theme.colors.error }]}>
                 Clear Watch History
               </Text>
@@ -409,14 +409,14 @@ export default function SettingsScreen() {
 
           <TouchableOpacity style={styles.settingItem} onPress={handleClearCache}>
             <View style={styles.settingLeft}>
-              <Database color={theme.colors.text} size={24} />
+              <Database style={styles.settingIcon} color={theme.colors.text} size={24} />
               <Text style={styles.settingLabel}>Clear Cache</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.settingItem} onPress={handleExportData}>
             <View style={styles.settingLeft}>
-              <Download color={theme.colors.text} size={24} />
+              <Download style={styles.settingIcon} color={theme.colors.text} size={24} />
               <Text style={styles.settingLabel}>Export Data</Text>
             </View>
           </TouchableOpacity>
@@ -430,7 +430,7 @@ export default function SettingsScreen() {
             onPress={() => router.push("/edit-profile")}
           >
             <View style={styles.settingLeft}>
-              <User color={theme.colors.text} size={24} />
+              <User style={styles.settingIcon} color={theme.colors.text} size={24} />
               <View>
                 <Text style={styles.settingLabel}>Manage Account</Text>
                 <Text style={styles.settingDescription}>
@@ -447,7 +447,7 @@ export default function SettingsScreen() {
             onPress={() => setShowDeveloperOptions(!showDeveloperOptions)}
           >
             <View style={styles.settingLeft}>
-              <Code color={theme.colors.textSecondary} size={24} />
+              <Code style={styles.settingIcon} color={theme.colors.textSecondary} size={24} />
               <Text style={styles.settingLabel}>Developer Options</Text>
             </View>
           </TouchableOpacity>
@@ -491,6 +491,9 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  settingIcon: {
+    marginRight: theme.spacing.md,
+  },
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -534,7 +537,6 @@ const styles = StyleSheet.create({
   settingLeft: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: theme.spacing.md,
     flex: 1,
   },
   settingLabel: {
@@ -552,7 +554,6 @@ const styles = StyleSheet.create({
   },
   colorsContainer: {
     paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.sm,
   },
   colorOption: {
     width: 48,
@@ -575,7 +576,6 @@ const styles = StyleSheet.create({
   qualityContainer: {
     flexDirection: "row" as const,
     flexWrap: "wrap" as const,
-    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.md,
   },
@@ -586,6 +586,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    marginRight: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   qualityText: {
     fontSize: theme.fontSizes.sm,
@@ -598,12 +600,12 @@ const styles = StyleSheet.create({
   devInfo: {
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    gap: theme.spacing.xs,
   },
   devInfoText: {
     fontSize: theme.fontSizes.sm,
     color: theme.colors.textSecondary,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    marginBottom: theme.spacing.xs,
   },
   dangerButton: {
     marginHorizontal: theme.spacing.md,
@@ -621,10 +623,10 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: "center" as const,
     paddingVertical: theme.spacing.xl,
-    gap: theme.spacing.xs,
   },
   footerText: {
     fontSize: theme.fontSizes.sm,
     color: theme.colors.textSecondary,
+    marginTop: theme.spacing.xs,
   },
 });

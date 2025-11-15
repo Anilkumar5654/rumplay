@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { View } from "react-native";
 import { AppStateProvider } from "@/contexts/AppStateContext";
 import { PlayerProvider } from "@/contexts/PlayerContext";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -47,9 +47,9 @@ export default function RootLayout() {
         <AuthProvider>
           <AppStateProvider>
             <PlayerProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
+              <View style={{ flex: 1 }}>
                 <RootLayoutNav />
-              </GestureHandlerRootView>
+              </View>
             </PlayerProvider>
           </AppStateProvider>
         </AuthProvider>
