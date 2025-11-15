@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -21,12 +21,18 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ redirect?: string; restoreAction?: string }>();
-  const { login } = useAuth();
+  const { login, roleDestination, authError } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (authError) {
+      setFormError(authError);
+    }
+  }, [authError]);
 
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
@@ -47,25 +53,25 @@ export default function LoginScreen() {
     setFormError(null);
     const normalizedEmail = trimmedEmail.toLowerCase();
     console.log('[LoginScreen] Calling login with email:', normalizedEmail);
-    
+
     try {
       const result = await login(normalizedEmail, trimmedPassword);
       console.log('[LoginScreen] Login result:', result.success ? 'SUCCESS' : 'FAILED');
-      setIsLoading(false);
 
       if (result.success) {
         const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
-        const destination = redirectPath ?? result.destination ?? '/(tabs)/home';
+        const destination = redirectPath ?? roleDestination;
         Alert.alert('Success', 'Logged in successfully!', [
           { text: 'OK', onPress: () => router.replace(destination) }
         ]);
       } else {
-        setFormError(result.error || 'Login failed. Please try again.');
+        setFormError(result.message ?? 'Login failed. Please try again.');
       }
     } catch (error) {
       console.error('[LoginScreen] Unexpected error:', error);
-      setIsLoading(false);
       setFormError('Unable to complete login. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 

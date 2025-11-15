@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -21,13 +21,19 @@ export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ redirect?: string }>();
-  const { register } = useAuth();
+  const { register, roleDestination, authError } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (authError) {
+      setFormError(authError);
+    }
+  }, [authError]);
 
   const handleRegister = async () => {
     const trimmedEmail = email.trim();
@@ -59,21 +65,21 @@ export default function RegisterScreen() {
 
     try {
       const result = await register(trimmedEmail.toLowerCase(), trimmedPassword, trimmedUsername);
-      setIsLoading(false);
 
       if (result.success) {
         const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
-        const destination = redirectPath ?? result.destination ?? '/(tabs)/home';
+        const destination = redirectPath ?? roleDestination;
         Alert.alert('Success', 'Account created successfully!', [
           { text: 'OK', onPress: () => router.replace(destination) }
         ]);
       } else {
-        setFormError(result.error || 'Registration failed. Please try again.');
+        setFormError(result.message ?? 'Registration failed. Please try again.');
       }
     } catch (error) {
       console.error('[RegisterScreen] Unexpected error:', error);
-      setIsLoading(false);
       setFormError('Unable to complete registration. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
