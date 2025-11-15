@@ -11,7 +11,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Mail, Lock, AtSign } from 'lucide-react-native';
 import { theme } from '../constants/theme';
@@ -20,6 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ redirect?: string }>();
   const { register } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -33,17 +34,21 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters.');
+    if (password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters.');
       return;
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUsername = username.trim();
+
     setIsLoading(true);
-    const result = await register(email.trim(), password, username.trim());
+    const result = await register(normalizedEmail, password, normalizedUsername);
     setIsLoading(false);
 
     if (result.success) {
-      const destination = result.destination || '/(tabs)';
+      const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
+      const destination = redirectPath ?? result.destination ?? '/(tabs)';
       Alert.alert('Success', 'Account created successfully!', [
         { text: 'OK', onPress: () => router.replace(destination) }
       ]);
@@ -123,6 +128,7 @@ export default function RegisterScreen() {
             style={[styles.registerButton, isLoading && styles.registerButtonDisabled]}
             onPress={handleRegister}
             disabled={isLoading}
+            testID="register-submit"
           >
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -133,8 +139,9 @@ export default function RegisterScreen() {
 
           <TouchableOpacity
             style={styles.loginLink}
-            onPress={() => router.push('/login')}
+            onPress={() => router.push({ pathname: '/login', params })}
             disabled={isLoading}
+            testID="register-go-login"
           >
             <Text style={styles.loginLinkText}>
               Already have an account?{' '}

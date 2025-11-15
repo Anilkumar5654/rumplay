@@ -11,7 +11,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Mail, Lock } from 'lucide-react-native';
 import { theme } from '../constants/theme';
@@ -20,6 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ redirect?: string; restoreAction?: string }>();
   const { login } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -33,11 +34,13 @@ export default function LoginScreen() {
     }
 
     setIsLoading(true);
-    const result = await login(email.trim(), password);
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await login(normalizedEmail, password);
     setIsLoading(false);
 
     if (result.success) {
-      const destination = result.destination || '/(tabs)';
+      const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
+      const destination = redirectPath ?? result.destination ?? '/(tabs)';
       Alert.alert('Success', 'Logged in successfully!', [
         { text: 'OK', onPress: () => router.replace(destination) }
       ]);
@@ -102,6 +105,7 @@ export default function LoginScreen() {
             style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
+            testID="login-submit"
           >
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -118,8 +122,9 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             style={styles.registerLink}
-            onPress={() => router.push('/register')}
+            onPress={() => router.push({ pathname: '/register', params })}
             disabled={isLoading}
+            testID="login-go-register"
           >
             <Text style={styles.registerLinkText}>
               Don’t have an account?{' '}

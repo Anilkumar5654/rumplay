@@ -1,26 +1,83 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
+import * as SecureStore from "expo-secure-store";
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Platform } from "react-native";
 import type { User, UserRole } from "../types";
-import { trpcClient, setTrpcAuthToken } from "../lib/trpc";
+import { trpcClient, setTrpcAuthToken, getApiBaseUrl } from "../lib/trpc";
 
-const AUTH_USER_KEY = 'rork_auth_user';
-const AUTH_TOKEN_KEY = 'rork_auth_token';
+const AUTH_USER_KEY = "rork_auth_user";
+const AUTH_TOKEN_KEY = "rork_auth_token";
 
 const resolveRoleDestination = (role: UserRole | null | undefined): string => {
   switch (role) {
-    case 'superadmin':
-      return '/super-admin';
-    case 'admin':
-      return '/admin-dashboard';
-    case 'creator':
-      return '/creator-studio';
+    case "superadmin":
+      return "/super-admin";
+    case "admin":
+      return "/admin-dashboard";
+    case "creator":
+      return "/creator-studio";
     default:
-      return '/(tabs)';
+      return "/(tabs)";
   }
 };
 
-type BackendUserPayload = {
+const secureStoreAvailable = Platform.OS !== "web" && typeof SecureStore.getItemAsync === "function";
+
+const tokenStore = {
+  get: async () => {
+    if (secureStoreAvailable) {
+      try {
+        return await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+      } catch (error) {
+        console.error("AuthContext tokenStore.get error", error);
+        return null;
+      }
+    }
+
+    try {
+      return await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    } catch (error) {
+      console.error("AuthContext tokenStore.get storage error", error);
+      return null;
+    }
+  },
+  set: async (token: string) => {
+    if (secureStoreAvailable) {
+      try {
+        await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token, {
+          keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+        });
+        return;
+      } catch (error) {
+        console.error("AuthContext tokenStore.set secure error", error);
+      }
+    }
+
+    try {
+      await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+    } catch (error) {
+      console.error("AuthContext tokenStore.set storage error", error);
+    }
+  },
+  remove: async () => {
+    if (secureStoreAvailable) {
+      try {
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+      } catch (error) {
+        console.error("AuthContext tokenStore.remove secure error", error);
+      }
+    }
+
+    try {
+      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    } catch (error) {
+      console.error("AuthContext tokenStore.remove storage error", error);
+    }
+  },
+};
+
+export type BackendUserPayload = {
   id: string;
   email: string;
   username: string;
@@ -31,14 +88,20 @@ type BackendUserPayload = {
   role: UserRole;
   createdAt: string;
   updatedAt?: string;
-  subscriptions: User['subscriptions'];
-  memberships: User['memberships'];
-  reactions: User['reactions'];
-  watchHistory: User['watchHistory'];
-  watchHistoryDetailed: User['watchHistoryDetailed'];
-  savedVideos: User['savedVideos'];
-  likedVideos: User['likedVideos'];
+  subscriptions: User["subscriptions"];
+  memberships: User["memberships"];
+  reactions: User["reactions"];
+  watchHistory: User["watchHistory"];
+  watchHistoryDetailed: User["watchHistoryDetailed"];
+  savedVideos: User["savedVideos"];
+  likedVideos: User["likedVideos"];
   rolesAssignedBy?: string;
+};
+
+type AuthMeResponse = {
+  success: boolean;
+  user?: BackendUserPayload;
+  error?: string;
 };
 
 const mapBackendUser = (data: BackendUserPayload): User => ({
@@ -46,8 +109,8 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
   email: data.email,
   username: data.username,
   displayName: data.displayName ?? data.username,
-  avatar: data.avatar ?? '',
-  bio: data.bio ?? '',
+  avatar: data.avatar ?? "",
+  bio: data.bio ?? "",
   channelId: data.channelId ?? null,
   role: data.role,
   rolesAssignedBy: data.rolesAssignedBy,
@@ -62,17 +125,56 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
   createdAt: data.createdAt,
 });
 
-const parseStoredUser = (raw: string | null): BackendUserPayload | null => {
-  if (!raw) {
-    return null;
+const fetchCurrentUser = async (token: string): Promise<BackendUserPayload | null> => {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/me`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      return null;
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || "Failed to validate session");
+    }
+
+    const data = (await response.json()) as AuthMeResponse;
+    if (!data.success || !data.user) {
+      return null;
+    }
+
+    return data.user;
+  } catch (error) {
+    console.error("AuthContext fetchCurrentUser error", error);
+    throw error;
+  }
+};
+
+const revokeSessionRemote = async (token: string | null) => {
+  if (!token) {
+    return;
   }
 
   try {
-    const parsed = JSON.parse(raw) as BackendUserPayload;
-    return parsed;
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn("AuthContext revokeSessionRemote non 2xx", response.status);
+    }
   } catch (error) {
-    console.error('AuthContext parseStoredUser error', error);
-    return null;
+    console.error("AuthContext revokeSessionRemote error", error);
   }
 };
 
@@ -81,71 +183,81 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const [authToken, setAuthTokenState] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  const persistSession = useCallback(async (token: string, userPayload: BackendUserPayload) => {
-    await AsyncStorage.multiSet([
-      [AUTH_TOKEN_KEY, token],
-      [AUTH_USER_KEY, JSON.stringify(userPayload)],
-    ]);
+  const persistSession = useCallback(async (token: string) => {
+    await tokenStore.set(token);
     setTrpcAuthToken(token);
     setAuthTokenState(token);
   }, []);
 
   const clearSession = useCallback(async () => {
-    console.log('AuthContext clearSession');
-    await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_USER_KEY]);
+    console.log("AuthContext clearSession");
+    await tokenStore.remove();
+    await AsyncStorage.removeItem(AUTH_USER_KEY);
     setTrpcAuthToken(null);
     setAuthTokenState(null);
     setAuthUser(null);
     setIsAuthenticated(false);
   }, []);
 
-  const bootstrapAuth = useCallback(async () => {
-    console.log('AuthContext bootstrapAuth start');
-    setIsAuthLoading(true);
-    try {
-      const [storedToken, storedUserRaw] = await AsyncStorage.multiGet([AUTH_TOKEN_KEY, AUTH_USER_KEY]);
-      const token = storedToken?.[1] ?? null;
-      const userPayload = parseStoredUser(storedUserRaw?.[1] ?? null);
+  const refreshAuthUser = useCallback(
+    async (forcedToken?: string) => {
+      const sessionToken = forcedToken ?? authToken;
 
-      if (!token) {
+      if (!sessionToken) {
+        await clearSession();
+        return { success: false, error: "Missing session token" } as const;
+      }
+
+      try {
+        const backendUser = await fetchCurrentUser(sessionToken);
+        if (!backendUser) {
+          await clearSession();
+          return { success: false, error: "Session expired" } as const;
+        }
+
+        const mapped = mapBackendUser(backendUser);
+        setAuthUser(mapped);
+        setIsAuthenticated(true);
+        setAuthError(null);
+        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(backendUser));
+        return { success: true, user: mapped } as const;
+      } catch (error) {
+        setAuthError("Unable to verify authentication. Please try again.");
+        return { success: false, error: "Unable to fetch profile" } as const;
+      }
+    },
+    [authToken, clearSession]
+  );
+
+  const bootstrapAuth = useCallback(async () => {
+    console.log("AuthContext bootstrapAuth start");
+    setIsAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      const storedToken = await tokenStore.get();
+      if (!storedToken) {
         await clearSession();
         return;
       }
 
-      setTrpcAuthToken(token);
-      setAuthTokenState(token);
+      setTrpcAuthToken(storedToken);
+      setAuthTokenState(storedToken);
+      const result = await refreshAuthUser(storedToken);
 
-      try {
-        const profile = await trpcClient.users.getProfile.query({});
-        if (profile?.success && profile.user) {
-          const mapped = mapBackendUser(profile.user as BackendUserPayload);
-          setAuthUser(mapped);
-          setIsAuthenticated(true);
-          await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile.user));
-          console.log('AuthContext bootstrapAuth success', mapped.id);
-          return;
-        }
-      } catch (error) {
-        console.error('AuthContext bootstrapAuth remote error', error);
+      if (!result.success) {
+        await clearSession();
       }
-
-      if (userPayload) {
-        const mapped = mapBackendUser(userPayload);
-        setAuthUser(mapped);
-        setIsAuthenticated(true);
-        console.log('AuthContext bootstrapAuth fallback user', mapped.id);
-        return;
-      }
-
-      await clearSession();
     } catch (error) {
-      console.error('AuthContext bootstrapAuth failure', error);
+      console.error("AuthContext bootstrapAuth failure", error);
+      setAuthError("Authentication check failed. Please login again.");
       await clearSession();
     } finally {
       setIsAuthLoading(false);
     }
-  }, [clearSession]);
+  }, [clearSession, refreshAuthUser]);
 
   useEffect(() => {
     bootstrapAuth();
@@ -160,26 +272,30 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         const response = await trpcClient.auth.login.mutate({ email, password });
 
         if (!response.success || !response.token || !response.user) {
-          return { success: false, error: response.error ?? 'Invalid login credentials.' };
+          return { success: false, error: response.error ?? "Invalid login credentials." };
         }
 
-        const mapped = mapBackendUser(response.user as BackendUserPayload);
-        await persistSession(response.token, response.user as BackendUserPayload);
-        setAuthUser(mapped);
-        setIsAuthenticated(true);
-        console.log('AuthContext login success', mapped.id, mapped.role);
+        await persistSession(response.token);
+        const refreshed = await refreshAuthUser(response.token);
+
+        if (!refreshed.success || !refreshed.user) {
+          await clearSession();
+          return { success: false, error: "Unable to initialize session." };
+        }
+
+        console.log("AuthContext login success", refreshed.user.id, refreshed.user.role);
 
         return {
           success: true,
-          user: mapped,
-          destination: resolveRoleDestination(mapped.role),
+          user: refreshed.user,
+          destination: resolveRoleDestination(refreshed.user.role),
         };
       } catch (error) {
-        console.error('AuthContext login error', error);
-        return { success: false, error: 'Unable to login. Please try again.' };
+        console.error("AuthContext login error", error);
+        return { success: false, error: "Unable to login. Please try again." };
       }
     },
-    [persistSession]
+    [clearSession, persistSession, refreshAuthUser]
   );
 
   const register = useCallback(
@@ -197,37 +313,42 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         });
 
         if (!response.success || !response.token || !response.user) {
-          return { success: false, error: response.error ?? 'Registration failed.' };
+          return { success: false, error: response.error ?? "Registration failed." };
         }
 
-        const mapped = mapBackendUser(response.user as BackendUserPayload);
-        await persistSession(response.token, response.user as BackendUserPayload);
-        setAuthUser(mapped);
-        setIsAuthenticated(true);
-        console.log('AuthContext register success', mapped.id, mapped.role);
+        await persistSession(response.token);
+        const refreshed = await refreshAuthUser(response.token);
+
+        if (!refreshed.success || !refreshed.user) {
+          await clearSession();
+          return { success: false, error: "Unable to initialize session." };
+        }
+
+        console.log("AuthContext register success", refreshed.user.id, refreshed.user.role);
 
         return {
           success: true,
-          user: mapped,
-          destination: resolveRoleDestination(mapped.role),
+          user: refreshed.user,
+          destination: resolveRoleDestination(refreshed.user.role),
         };
       } catch (error) {
-        console.error('AuthContext register error', error);
-        return { success: false, error: 'Unable to register. Please try again.' };
+        console.error("AuthContext register error", error);
+        return { success: false, error: "Unable to register. Please try again." };
       }
     },
-    [persistSession]
+    [clearSession, persistSession, refreshAuthUser]
   );
 
   const logout = useCallback(async () => {
+    await revokeSessionRemote(authToken);
     await clearSession();
-    console.log('AuthContext logout');
-  }, [clearSession]);
+    console.log("AuthContext logout");
+  }, [authToken, clearSession]);
 
   const updateAuthUser = useCallback(
     async (updates: Partial<BackendUserPayload> & { newPassword?: string; currentPassword?: string }) => {
       if (!authUser) {
-        return { success: false, error: 'No authenticated user.' } as const;
+        return { success: false, error: "No authenticated user." } as const;
       }
 
       try {
@@ -242,17 +363,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         });
 
         if (!response.success || !response.user) {
-          return { success: false, error: 'Unable to update profile.' } as const;
+          return { success: false, error: "Unable to update profile." } as const;
         }
 
         const mapped = mapBackendUser(response.user as BackendUserPayload);
         setAuthUser(mapped);
         await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
-        console.log('AuthContext updateAuthUser', mapped.id);
+        console.log("AuthContext updateAuthUser", mapped.id);
         return { success: true, user: mapped } as const;
       } catch (error) {
-        console.error('AuthContext updateAuthUser error', error);
-        return { success: false, error: 'Profile update failed.' } as const;
+        console.error("AuthContext updateAuthUser error", error);
+        return { success: false, error: "Profile update failed." } as const;
       }
     },
     [authUser]
@@ -267,7 +388,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         });
 
         if (!response.success || !response.user) {
-          return { success: false, error: 'Unable to assign role.' } as const;
+          return { success: false, error: "Unable to assign role." } as const;
         }
 
         if (authUser?.id === targetUserId) {
@@ -278,16 +399,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         return { success: true, user: mapBackendUser(response.user as BackendUserPayload) } as const;
       } catch (error) {
-        console.error('AuthContext assignRole error', error);
-        return { success: false, error: 'Role assignment failed.' } as const;
+        console.error("AuthContext assignRole error", error);
+        return { success: false, error: "Role assignment failed." } as const;
       }
     },
     [authUser]
   );
 
-  const isSuperAdmin = useCallback(() => authUser?.role === 'superadmin', [authUser]);
-  const isAdmin = useCallback(() => authUser?.role === 'admin' || authUser?.role === 'superadmin', [authUser]);
-  const isCreator = useCallback(() => authUser?.role === 'creator', [authUser]);
+  const isSuperAdmin = useCallback(() => authUser?.role === "superadmin", [authUser]);
+  const isAdmin = useCallback(() => authUser?.role === "admin" || authUser?.role === "superadmin", [authUser]);
+  const isCreator = useCallback(() => authUser?.role === "creator", [authUser]);
 
   const roleDestination = useMemo(() => resolveRoleDestination(authUser?.role), [authUser?.role]);
 
@@ -297,6 +418,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       authToken,
       isAuthLoading,
       isAuthenticated,
+      authError,
       login,
       register,
       logout,
@@ -306,9 +428,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       isAdmin,
       isCreator,
       roleDestination,
+      refreshAuthUser,
     }),
     [
       assignRole,
+      authError,
       authToken,
       authUser,
       isAdmin,
@@ -318,6 +442,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       isSuperAdmin,
       login,
       logout,
+      refreshAuthUser,
       register,
       roleDestination,
       updateAuthUser,

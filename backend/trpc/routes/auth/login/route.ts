@@ -1,33 +1,7 @@
 import { z } from "zod";
 import { publicProcedure } from "../../../create-context";
 import { createSession, findUserByEmail, verifyPassword } from "../../../../utils/database";
-
-const sanitizeUser = (user: ReturnType<typeof findUserByEmail>) => {
-  if (!user) {
-    return null;
-  }
-
-  return {
-    id: user.id,
-    email: user.email,
-    username: user.username,
-    displayName: user.displayName,
-    avatar: user.avatar,
-    bio: user.bio,
-    channelId: user.channelId,
-    role: user.role,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-    subscriptions: user.subscriptions,
-    memberships: user.memberships,
-    reactions: user.reactions,
-    watchHistory: user.watchHistory,
-    watchHistoryDetailed: user.watchHistoryDetailed,
-    savedVideos: user.savedVideos,
-    likedVideos: user.likedVideos,
-    rolesAssignedBy: user.rolesAssignedBy,
-  };
-};
+import { sanitizeUser } from "../../../../utils/auth-helpers";
 
 export const loginProcedure = publicProcedure
   .input(

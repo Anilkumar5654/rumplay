@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { publicProcedure } from "../../../create-context";
 import { createSession, createUser } from "../../../../utils/database";
-
-const SUPER_ADMIN_EMAIL = "565413anil@gmail.com";
+import { sanitizeUser } from "../../../../utils/auth-helpers";
+import { SUPER_ADMIN_EMAIL } from "../../../../constants/auth";
 
 export const registerProcedure = publicProcedure
   .input(
@@ -29,26 +29,7 @@ export const registerProcedure = publicProcedure
       return {
         success: true,
         token: session.token,
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          displayName: user.displayName,
-          avatar: user.avatar,
-          bio: user.bio,
-          channelId: user.channelId,
-          role: user.role,
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt,
-          subscriptions: user.subscriptions,
-          memberships: user.memberships,
-          reactions: user.reactions,
-          watchHistory: user.watchHistory,
-          watchHistoryDetailed: user.watchHistoryDetailed,
-          savedVideos: user.savedVideos,
-          likedVideos: user.likedVideos,
-          rolesAssignedBy: user.rolesAssignedBy,
-        },
+        user: sanitizeUser(user),
       } as const;
     } catch (error) {
       return {

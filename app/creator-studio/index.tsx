@@ -1,101 +1,85 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
-import { useAuth } from '../../contexts/AuthContext';
 import { BarChart3, Camera, DollarSign, LineChart, Settings } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-
-const allowedRoles = new Set(['creator', 'admin', 'superadmin']);
+import { CreatorGuard } from '../../components/guards/RoleGuard';
 
 export default function CreatorStudioScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated, authUser } = useAuth();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace('/login');
-      return;
-    }
-    if (authUser && !allowedRoles.has(authUser.role)) {
-      router.replace('/(tabs)');
-    }
-  }, [authUser, isAuthenticated, router]);
-
-  if (!isAuthenticated || !authUser || !allowedRoles.has(authUser.role)) {
-    return <View style={styles.gatingContainer} testID="creatorStudioGuard" />;
-  }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + theme.spacing.md }]}
-      testID="creatorStudioScreen">
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header} testID="creatorStudioHeader">
-          <Text style={styles.title}>Creator Studio</Text>
-          <Text style={styles.subtitle}>Craft outstanding content and track your channel growth.</Text>
-        </View>
-
-        <View style={styles.section} testID="creatorQuickActions">
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionsGrid}>
-            <FeatureCard
-              testID="uploadVideoAction"
-              icon={Camera}
-              title="Upload Video"
-              description="Share a new story with the community"
-              onPress={() => router.push('/upload')}
-            />
-            <FeatureCard
-              testID="manageVideosAction"
-              icon={Settings}
-              title="Manage Library"
-              description="Edit titles, metadata, and monetization"
-              onPress={() => router.push('/profile')}
-            />
-            <FeatureCard
-              testID="monetizationAction"
-              icon={DollarSign}
-              title="Monetization"
-              description="Check earnings and optimize revenue"
-              onPress={() => router.push('/creator-studio/monetization')}
-            />
-            <FeatureCard
-              testID="analyticsAction"
-              icon={BarChart3}
-              title="Analytics"
-              description="Understand how audiences engage with videos"
-              onPress={() => router.push('/creator-studio/analytics')}
-            />
+    <CreatorGuard testID="creatorStudioGuard">
+      <View style={[styles.container, { paddingTop: insets.top + theme.spacing.md }]} testID="creatorStudioScreen">
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header} testID="creatorStudioHeader">
+            <Text style={styles.title}>Creator Studio</Text>
+            <Text style={styles.subtitle}>Craft outstanding content and track your channel growth.</Text>
           </View>
-        </View>
 
-        <View style={styles.section} testID="creatorInsights">
-          <Text style={styles.sectionTitle}>Today’s Snapshot</Text>
-          <View style={styles.snapshotCard}>
-            <View style={styles.snapshotRow}>
-              <LineChart color={theme.colors.primary} size={24} />
-              <View style={styles.snapshotTextGroup}>
-                <Text style={styles.snapshotValue}>12.4K</Text>
-                <Text style={styles.snapshotLabel}>Views in the last 48 hours</Text>
-              </View>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.snapshotRow}>
-              <DollarSign color={theme.colors.primary} size={24} />
-              <View style={styles.snapshotTextGroup}>
-                <Text style={styles.snapshotValue}>$342.18</Text>
-                <Text style={styles.snapshotLabel}>Estimated revenue this month</Text>
-              </View>
+          <View style={styles.section} testID="creatorQuickActions">
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <View style={styles.actionsGrid}>
+              <FeatureCard
+                testID="uploadVideoAction"
+                icon={Camera}
+                title="Upload Video"
+                description="Share a new story with the community"
+                onPress={() => router.push('/upload')}
+              />
+              <FeatureCard
+                testID="manageVideosAction"
+                icon={Settings}
+                title="Manage Library"
+                description="Edit titles, metadata, and monetization"
+                onPress={() => router.push('/profile')}
+              />
+              <FeatureCard
+                testID="monetizationAction"
+                icon={DollarSign}
+                title="Monetization"
+                description="Check earnings and optimize revenue"
+                onPress={() => router.push('/creator-studio/monetization')}
+              />
+              <FeatureCard
+                testID="analyticsAction"
+                icon={BarChart3}
+                title="Analytics"
+                description="Understand how audiences engage with videos"
+                onPress={() => router.push('/creator-studio/analytics')}
+              />
             </View>
           </View>
-        </View>
-      </ScrollView>
-    </View>
+
+          <View style={styles.section} testID="creatorInsights">
+            <Text style={styles.sectionTitle}>Today’s Snapshot</Text>
+            <View style={styles.snapshotCard}>
+              <View style={styles.snapshotRow}>
+                <LineChart color={theme.colors.primary} size={24} />
+                <View style={styles.snapshotTextGroup}>
+                  <Text style={styles.snapshotValue}>12.4K</Text>
+                  <Text style={styles.snapshotLabel}>Views in the last 48 hours</Text>
+                </View>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.snapshotRow}>
+                <DollarSign color={theme.colors.primary} size={24} />
+                <View style={styles.snapshotTextGroup}>
+                  <Text style={styles.snapshotValue}>$342.18</Text>
+                  <Text style={styles.snapshotLabel}>Estimated revenue this month</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    </CreatorGuard>
   );
 }
 
@@ -121,10 +105,6 @@ function FeatureCard({ icon: Icon, title, description, onPress, testID }: Featur
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  gatingContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,
   },

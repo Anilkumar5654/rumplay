@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,28 +6,16 @@ import { Globe, Settings2, Users2, PlaySquare, Crown, Database, LogOut } from 'l
 import type { LucideIcon } from 'lucide-react-native';
 import { theme } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
+import { SuperAdminGuard } from '../../components/guards/RoleGuard';
 
 export default function SuperAdminPanelScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { authUser, isAuthenticated, logout } = useAuth();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace('/login');
-      return;
-    }
-    if (authUser && authUser.role !== 'superadmin' && authUser.email !== '565413anil@gmail.com') {
-      router.replace('/(tabs)');
-    }
-  }, [authUser, isAuthenticated, router]);
-
-  if (!isAuthenticated || !authUser || (authUser.role !== 'superadmin' && authUser.email !== '565413anil@gmail.com')) {
-    return <View style={styles.gatingContainer} testID="superAdminGuard" />;
-  }
+  const { logout } = useAuth();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + theme.spacing.md }]} testID="superAdminPanel">
+    <SuperAdminGuard testID="superAdminGuard">
+      <View style={[styles.container, { paddingTop: insets.top + theme.spacing.md }]} testID="superAdminPanel">
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -99,6 +87,7 @@ export default function SuperAdminPanelScreen() {
         </TouchableOpacity>
       </ScrollView>
     </View>
+    </SuperAdminGuard>
   );
 }
 
@@ -124,10 +113,6 @@ function ControlCard({ icon: Icon, title, description, onPress, testID }: Contro
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  gatingContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,
   },
