@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppStateProvider } from "@/contexts/AppStateContext";
 import { PlayerProvider } from "@/contexts/PlayerContext";
 import { StatusBar } from "expo-status-bar";
+import { trpc, trpcClient } from "@/lib/trpc";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,14 +36,16 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppStateProvider>
-        <PlayerProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <RootLayoutNav />
-          </GestureHandlerRootView>
-        </PlayerProvider>
-      </AppStateProvider>
-    </QueryClientProvider>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <AppStateProvider>
+          <PlayerProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <RootLayoutNav />
+            </GestureHandlerRootView>
+          </PlayerProvider>
+        </AppStateProvider>
+      </QueryClientProvider>
+    </trpc.Provider>
   );
 }
