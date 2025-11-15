@@ -67,6 +67,7 @@ export const defaultUser: User = {
   avatar: 'https://via.placeholder.com/150',
   bio: '',
   channelId: null,
+  role: 'user' as const,
   subscriptions: [],
   memberships: [],
   reactions: [],

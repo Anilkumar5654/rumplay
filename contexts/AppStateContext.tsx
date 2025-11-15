@@ -88,11 +88,13 @@ export const [AppStateProvider, useAppState] = createContextHook(() => {
 
       const migratedUsers = parsedUsers.map((u: User) => ({
         ...u,
+        role: u.role || 'user',
         watchHistoryDetailed: u.watchHistoryDetailed || [],
       }));
 
       const migratedCurrentUser = {
         ...parsedCurrentUser,
+        role: parsedCurrentUser.role || 'user',
         watchHistoryDetailed: parsedCurrentUser.watchHistoryDetailed || [],
       };
 

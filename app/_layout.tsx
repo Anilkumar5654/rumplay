@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppStateProvider } from "@/contexts/AppStateContext";
 import { PlayerProvider } from "@/contexts/PlayerContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { StatusBar } from "expo-status-bar";
 import { trpc, trpcClient } from "@/lib/trpc";
 
@@ -18,6 +19,11 @@ function RootLayoutNav() {
       <StatusBar style="light" />
       <Stack screenOptions={{ headerBackTitle: "Back", headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="register" options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="search" options={{ headerShown: false, presentation: "card" }} />
+        <Stack.Screen name="admin" options={{ headerShown: false, presentation: "card" }} />
+        <Stack.Screen name="shorts-feed" options={{ headerShown: false, presentation: "card" }} />
         <Stack.Screen name="video/[id]" options={{ headerShown: false, presentation: "card" }} />
         <Stack.Screen name="channel/[id]" options={{ headerShown: false, presentation: "card" }} />
         <Stack.Screen name="shorts/[id]" options={{ headerShown: false, presentation: "card" }} />
@@ -38,13 +44,15 @@ export default function RootLayout() {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <AppStateProvider>
-          <PlayerProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <RootLayoutNav />
-            </GestureHandlerRootView>
-          </PlayerProvider>
-        </AppStateProvider>
+        <AuthProvider>
+          <AppStateProvider>
+            <PlayerProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <RootLayoutNav />
+              </GestureHandlerRootView>
+            </PlayerProvider>
+          </AppStateProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );

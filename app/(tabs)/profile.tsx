@@ -2,11 +2,12 @@ import React, { useState, useMemo } from "react";
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, FlatList, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit } from "lucide-react-native";
+import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit, Shield } from "lucide-react-native";
 import VideoEditModal from "@/components/VideoEditModal";
 import { Video } from "@/types";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const { width } = Dimensions.get("window");
 
@@ -14,6 +15,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { currentUser, channels, videos } = useAppState();
+  const { isSuperAdmin } = useAuth();
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [showMyVideos, setShowMyVideos] = useState(false);
@@ -35,6 +37,7 @@ export default function ProfileScreen() {
     { icon: ThumbsUp, label: "Liked Videos", count: currentUser.likedVideos.length, route: null },
     { icon: Bookmark, label: "Saved Videos", count: currentUser.savedVideos.length, route: null },
     { icon: ListVideo, label: "Playlists", count: 0, route: null },
+    ...(isSuperAdmin() ? [{ icon: Shield, label: "Admin Panel", count: null, route: "/admin" }] : []),
     { icon: Settings, label: "Settings", count: null, route: "/settings" },
   ];
 
@@ -104,6 +107,12 @@ export default function ProfileScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.profileSection}>
           <Image source={{ uri: currentUser.avatar }} style={styles.avatar} />
+          {isSuperAdmin() && (
+            <View style={styles.superAdminBadge}>
+              <Shield color="#FFD700" size={16} />
+              <Text style={styles.superAdminText}>SUPER ADMIN</Text>
+            </View>
+          )}
           <Text style={styles.displayName}>{currentUser.displayName}</Text>
           <Text style={styles.username}>@{currentUser.username}</Text>
           {currentUser.bio && <Text style={styles.bio}>{currentUser.bio}</Text>}
@@ -236,7 +245,25 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surface,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  superAdminBadge: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    backgroundColor: "rgba(255, 215, 0, 0.1)",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 6,
+    borderRadius: theme.radii.full,
+    marginBottom: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: "#FFD700",
+  },
+  superAdminText: {
+    fontSize: theme.fontSizes.xs,
+    fontWeight: "bold" as const,
+    color: "#FFD700",
+    letterSpacing: 1,
   },
   displayName: {
     fontSize: theme.fontSizes.xl,

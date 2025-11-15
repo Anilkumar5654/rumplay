@@ -124,14 +124,18 @@ export interface UserReaction {
   timestamp: string;
 }
 
+export type UserRole = 'user' | 'admin' | 'superadmin';
+
 export interface User {
   id: string;
   username: string;
   displayName: string;
   email: string;
+  password?: string;
   avatar: string;
   bio: string;
   channelId: string | null;
+  role: UserRole;
   subscriptions: Subscription[];
   memberships: Membership[];
   reactions: UserReaction[];

@@ -1,4 +1,4 @@
-import { Video, Channel, User, Story, Ad, Playlist } from '../types';
+import { Video, Channel, User, Story, Ad, Playlist, UserRole } from '../types';
 import { defaultMonetization } from '../utils/defaults';
 
 export const mockChannels: Channel[] = [
@@ -325,13 +325,34 @@ export const mockVideos: Video[] = [
 
 export const mockUsers: User[] = [
   {
+    id: 'superadmin1',
+    username: 'superadmin',
+    displayName: 'Super Admin',
+    email: '565413anil@gmail.com',
+    password: 'admin123',
+    avatar: 'https://i.pravatar.cc/150?img=50',
+    bio: 'Platform Super Administrator',
+    channelId: null,
+    role: 'superadmin' as const,
+    watchHistoryDetailed: [],
+    subscriptions: [],
+    memberships: [],
+    reactions: [],
+    watchHistory: [],
+    savedVideos: [],
+    likedVideos: [],
+    createdAt: '2020-01-01T00:00:00Z',
+  },
+  {
     id: 'user1',
     username: 'currentuser',
     displayName: 'Current User',
     email: 'user@playtube.com',
+    password: 'user123',
     avatar: 'https://i.pravatar.cc/150?img=30',
     bio: 'Content creator and tech enthusiast',
     channelId: 'ch1',
+    role: 'user' as const,
     watchHistoryDetailed: [],
     subscriptions: [
       { channelId: 'ch2', subscribedAt: '2024-06-01T00:00:00Z', notifications: true },
