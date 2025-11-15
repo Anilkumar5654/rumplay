@@ -127,10 +127,17 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
 });
 
 const resolveAuthErrorMessage = (error: unknown): string => {
+  console.log("[AuthContext] resolveAuthErrorMessage", error);
+  
   if (error instanceof TRPCClientError) {
     const dataMessage = typeof error.data?.message === "string" ? error.data.message : null;
     if (typeof error.message === "string" && error.message.toLowerCase().includes("unexpected token")) {
-      return "Unable to reach the authentication service. Please check your connection and try again.";
+      const apiUrl = getApiBaseUrl();
+      return `Cannot connect to backend at ${apiUrl}. Make sure the backend server is running on port 8787.`;
+    }
+    if (typeof error.message === "string" && error.message.toLowerCase().includes("fetch")) {
+      const apiUrl = getApiBaseUrl();
+      return `Network error: Cannot reach backend at ${apiUrl}. Please check if the server is running.`;
     }
     if (dataMessage && dataMessage.length > 0) {
       return dataMessage;
@@ -139,8 +146,14 @@ const resolveAuthErrorMessage = (error: unknown): string => {
       return error.message;
     }
   }
-  if (error instanceof Error && typeof error.message === "string" && error.message.length > 0) {
-    return error.message;
+  if (error instanceof Error) {
+    if (error.message.includes("Failed to fetch") || error.message.includes("Network request failed")) {
+      const apiUrl = getApiBaseUrl();
+      return `Cannot connect to backend at ${apiUrl}. Ensure the server is running and accessible.`;
+    }
+    if (typeof error.message === "string" && error.message.length > 0) {
+      return error.message;
+    }
   }
   return "Unable to process the request. Please try again.";
 };

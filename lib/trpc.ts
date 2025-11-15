@@ -178,6 +178,9 @@ export const trpcClient = trpc.createClient({
     httpBatchLink({
       url: `${getApiBaseUrl()}/api/trpc`,
       headers() {
+        const baseUrl = getApiBaseUrl();
+        console.log("[tRPC] Making request to:", `${baseUrl}/api/trpc`);
+        
         if (!authToken) {
           return {};
         }
@@ -185,6 +188,21 @@ export const trpcClient = trpc.createClient({
         return {
           authorization: `Bearer ${authToken}`,
         };
+      },
+      fetch(url, options) {
+        console.log("[tRPC] Fetch URL:", url);
+        console.log("[tRPC] Headers:", options?.headers);
+        
+        return fetch(url, options).then((res) => {
+          console.log("[tRPC] Response status:", res.status);
+          if (!res.ok && res.status !== 200) {
+            console.error("[tRPC] Non-OK response:", res.status, res.statusText);
+          }
+          return res;
+        }).catch((error) => {
+          console.error("[tRPC] Fetch error:", error);
+          throw error;
+        });
       },
     }),
   ],

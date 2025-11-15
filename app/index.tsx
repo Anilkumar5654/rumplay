@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useRootNavigationState } from "expo-router";
@@ -10,21 +10,23 @@ export default function Index() {
   const navigationState = useRootNavigationState();
   const { isAuthLoading, isAuthenticated, roleDestination } = useAuth();
 
-  const targetRoute = useMemo(() => {
-    if (!isAuthenticated) {
-      return "/login";
-    }
-
-    return roleDestination ?? "/(tabs)/home";
-  }, [isAuthenticated, roleDestination]);
-
   useEffect(() => {
-    if (!navigationState?.key || isAuthLoading) {
+    if (!navigationState?.key) {
       return;
     }
 
-    router.replace(targetRoute);
-  }, [navigationState?.key, isAuthLoading, router, targetRoute]);
+    if (isAuthLoading) {
+      return;
+    }
+
+    const targetRoute = isAuthenticated ? (roleDestination ?? "/(tabs)/home") : "/(tabs)/home";
+    
+    const timeoutId = setTimeout(() => {
+      router.replace(targetRoute);
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [navigationState?.key, isAuthLoading, isAuthenticated, roleDestination, router]);
 
   return (
     <SafeAreaView style={styles.container} testID="index-boot-screen">

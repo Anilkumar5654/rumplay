@@ -167,4 +167,16 @@ app.get("/", (c) => {
   return c.json({ status: "ok", message: "API is running" });
 });
 
+app.get("/api/health", (c) => {
+  return c.json({ 
+    status: "ok", 
+    message: "Backend API is healthy",
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      tRPC: "/api/trpc",
+      auth: "/api/auth/*"
+    }
+  });
+});
+
 export default app;
