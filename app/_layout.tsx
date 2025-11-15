@@ -38,6 +38,7 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
+    console.log("RootLayout ready");
     SplashScreen.hideAsync();
   }, []);
 

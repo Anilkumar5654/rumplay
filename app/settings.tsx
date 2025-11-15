@@ -31,8 +31,9 @@ import {
 } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
+import type { Settings } from "@/types";
 
-const ACCENT_COLORS = [
+const ACCENT_COLORS: { name: string; value: string }[] = [
   { name: "Pink", value: "#FF2D95" },
   { name: "Blue", value: "#2196F3" },
   { name: "Purple", value: "#9C27B0" },
@@ -50,13 +51,21 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { settings, saveSettings, currentUser, videos, channels } = useAppState();
 
-  const [localSettings, setLocalSettings] = useState(settings);
-  const [showDeveloperOptions, setShowDeveloperOptions] = useState(false);
+  const [localSettings, setLocalSettings] = useState<Settings>(settings);
+  const [showDeveloperOptions, setShowDeveloperOptions] = useState<boolean>(false);
 
-  const handleSettingChange = async (key: keyof typeof settings, value: any) => {
-    const updated = { ...localSettings, [key]: value };
+  const handleSettingChange = async <K extends keyof Settings>(
+    key: K,
+    value: Settings[K],
+  ): Promise<void> => {
+    console.log("Updating setting", key, value);
+    const updated: Settings = { ...localSettings, [key]: value };
     setLocalSettings(updated);
-    await saveSettings(updated);
+    try {
+      await saveSettings(updated);
+    } catch (error) {
+      console.error("Failed to persist setting", key, error);
+    }
   };
 
   const handleClearCache = () => {
@@ -187,9 +196,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={localSettings.theme === "dark"}
-              onValueChange={(value) =>
-                handleSettingChange("theme", value ? "dark" : "light")
-              }
+              onValueChange={(value) => {
+                void handleSettingChange("theme", value ? "dark" : "light");
+              }}
               trackColor={{ false: theme.colors.border, true: accentColor }}
               thumbColor="#FFFFFF"
             />
@@ -208,21 +217,23 @@ export default function SettingsScreen() {
             style={styles.colorsScroll}
             contentContainerStyle={styles.colorsContainer}
           >
-            {ACCENT_COLORS.map((color) => (
-              <TouchableOpacity
-                key={color.value}
-                style={[
-                  styles.colorOption,
-                  { backgroundColor: color.value },
-                  localSettings.accentColor === color.value && styles.colorOptionActive,
-                ]}
-                onPress={() => handleSettingChange("accentColor", color.value)}
-              >
-                {localSettings.accentColor === color.value && (
-                  <View style={styles.colorCheck} />
-                )}
-              </TouchableOpacity>
-            ))}
+            {ACCENT_COLORS.map((color) => {
+              const isActive = localSettings.accentColor === color.value;
+              return (
+                <TouchableOpacity
+                  key={color.value}
+                  testID={`accent-color-${color.name.toLowerCase()}`}
+                  style={[
+                    styles.colorOption,
+                    { backgroundColor: color.value },
+                    isActive ? styles.colorOptionActive : undefined,
+                  ]}
+                  onPress={() => void handleSettingChange("accentColor", color.value)}
+                >
+                  {isActive && <View style={styles.colorCheck} />}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -241,7 +252,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={localSettings.autoPlayNext}
-              onValueChange={(value) => handleSettingChange("autoPlayNext", value)}
+              onValueChange={(value) => {
+                void handleSettingChange("autoPlayNext", value);
+              }}
               trackColor={{ false: theme.colors.border, true: accentColor }}
               thumbColor="#FFFFFF"
             />
@@ -259,7 +272,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={localSettings.autoPlayOnWifiOnly}
-              onValueChange={(value) => handleSettingChange("autoPlayOnWifiOnly", value)}
+              onValueChange={(value) => {
+                void handleSettingChange("autoPlayOnWifiOnly", value);
+              }}
               trackColor={{ false: theme.colors.border, true: accentColor }}
               thumbColor="#FFFFFF"
             />
@@ -277,7 +292,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={localSettings.autoPlayOnOpen}
-              onValueChange={(value) => handleSettingChange("autoPlayOnOpen", value)}
+              onValueChange={(value) => {
+                void handleSettingChange("autoPlayOnOpen", value);
+              }}
               trackColor={{ false: theme.colors.border, true: accentColor }}
               thumbColor="#FFFFFF"
             />
@@ -295,7 +312,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={localSettings.miniPlayerEnabled}
-              onValueChange={(value) => handleSettingChange("miniPlayerEnabled", value)}
+              onValueChange={(value) => {
+                void handleSettingChange("miniPlayerEnabled", value);
+              }}
               trackColor={{ false: theme.colors.border, true: accentColor }}
               thumbColor="#FFFFFF"
             />
@@ -313,9 +332,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={localSettings.backgroundAudioEnabled}
-              onValueChange={(value) =>
-                handleSettingChange("backgroundAudioEnabled", value)
-              }
+              onValueChange={(value) => {
+                void handleSettingChange("backgroundAudioEnabled", value);
+              }}
               trackColor={{ false: theme.colors.border, true: accentColor }}
               thumbColor="#FFFFFF"
             />
@@ -334,7 +353,9 @@ export default function SettingsScreen() {
               </View>
               <Switch
                 value={localSettings.pipEnabled}
-                onValueChange={(value) => handleSettingChange("pipEnabled", value)}
+                onValueChange={(value) => {
+                  void handleSettingChange("pipEnabled", value);
+                }}
                 trackColor={{ false: theme.colors.border, true: accentColor }}
                 thumbColor="#FFFFFF"
               />
@@ -349,27 +370,34 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.qualityContainer}>
-            {VIDEO_QUALITIES.map((quality) => (
-              <TouchableOpacity
-                key={quality}
-                style={[
-                  styles.qualityOption,
-                  localSettings.videoQuality === quality && {
-                    backgroundColor: accentColor,
-                  },
-                ]}
-                onPress={() => handleSettingChange("videoQuality", quality)}
-              >
-                <Text
+            {VIDEO_QUALITIES.map((quality) => {
+              const isSelected = localSettings.videoQuality === quality;
+              return (
+                <TouchableOpacity
+                  key={quality}
+                  testID={`quality-${quality}`}
                   style={[
-                    styles.qualityText,
-                    localSettings.videoQuality === quality && styles.qualityTextActive,
+                    styles.qualityOption,
+                    isSelected
+                      ? {
+                          backgroundColor: accentColor,
+                          borderColor: accentColor,
+                        }
+                      : undefined,
                   ]}
+                  onPress={() => void handleSettingChange("videoQuality", quality)}
                 >
-                  {quality === "auto" ? "Auto" : quality}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.qualityText,
+                      isSelected ? styles.qualityTextActive : undefined,
+                    ]}
+                  >
+                    {quality === "auto" ? "Auto" : quality}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -388,7 +416,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={localSettings.notificationsEnabled}
-              onValueChange={(value) => handleSettingChange("notificationsEnabled", value)}
+              onValueChange={(value) => {
+                void handleSettingChange("notificationsEnabled", value);
+              }}
               trackColor={{ false: theme.colors.border, true: accentColor }}
               thumbColor="#FFFFFF"
             />
@@ -460,9 +490,9 @@ export default function SettingsScreen() {
                 </View>
                 <Switch
                   value={localSettings.experimentalFeatures}
-                  onValueChange={(value) =>
-                    handleSettingChange("experimentalFeatures", value)
-                  }
+                  onValueChange={(value) => {
+                    void handleSettingChange("experimentalFeatures", value);
+                  }}
                   trackColor={{ false: theme.colors.border, true: accentColor }}
                   thumbColor="#FFFFFF"
                 />
