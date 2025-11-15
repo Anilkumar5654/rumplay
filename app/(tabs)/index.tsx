@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   FlatList,
   Image,
-  TextInput,
   Dimensions,
   RefreshControl,
 } from "react-native";
@@ -28,7 +27,6 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { videos, currentUser } = useAppState();
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -41,11 +39,7 @@ export default function HomeScreen() {
       : regularVideos.filter((v) => v.category === selectedCategory);
 
   const subscribedChannelIds = currentUser.subscriptions.map((s) => s.channelId);
-  const recommendedVideos = filteredVideos.filter((v) => {
-    if (subscribedChannelIds.includes(v.channelId)) return true;
-    if (searchQuery && v.title.toLowerCase().includes(searchQuery.toLowerCase())) return true;
-    return true;
-  });
+  const recommendedVideos = filteredVideos;
 
   const formatViews = (views: number): string => {
     if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
@@ -136,19 +130,14 @@ export default function HomeScreen() {
             <Plus color={theme.colors.primary} size={24} />
           </TouchableOpacity>
         </View>
-        <View style={styles.searchContainer}>
+        <TouchableOpacity 
+          style={styles.searchContainer}
+          onPress={() => router.push('/search')}
+        >
           <Search color={theme.colors.textSecondary} size={20} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={theme.colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <TouchableOpacity>
-            <Mic color={theme.colors.textSecondary} size={20} />
-          </TouchableOpacity>
-        </View>
+          <Text style={styles.searchPlaceholder}>Search</Text>
+          <Mic color={theme.colors.textSecondary} size={20} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -265,9 +254,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     gap: theme.spacing.sm,
   },
-  searchInput: {
+  searchPlaceholder: {
     flex: 1,
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.md,
   },
   content: {

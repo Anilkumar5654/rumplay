@@ -95,16 +95,18 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         return { success: false, error: 'Username already taken.' };
       }
 
+      const isSuperAdmin = email.toLowerCase() === '565413anil@gmail.com';
+      
       const newUser: User = {
         id: `user${Date.now()}`,
         email,
         password,
         username,
-        displayName,
+        displayName: isSuperAdmin ? 'Super Admin' : displayName,
         avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`,
-        bio: '',
+        bio: isSuperAdmin ? 'Super Administrator - Full Access' : '',
         channelId: null,
-        role: 'user',
+        role: isSuperAdmin ? 'superadmin' : 'user',
         subscriptions: [],
         memberships: [],
         reactions: [],
