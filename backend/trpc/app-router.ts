@@ -10,6 +10,7 @@ import { shareVideoProcedure } from "./routes/videos/share/route";
 import { searchVideosProcedure } from "./routes/videos/search/route";
 import { updateProfileProcedure, getUserProfileProcedure } from "./routes/users/profile/route";
 import { getAllUsersProcedure, updateUserRoleProcedure, deleteUserProcedure } from "./routes/admin/manage-users/route";
+import { createRoleProcedure, listRolesProcedure } from "./routes/admin/roles/route";
 
 export const appRouter = createTRPCRouter({
   example: createTRPCRouter({
@@ -36,6 +37,8 @@ export const appRouter = createTRPCRouter({
     getAllUsers: getAllUsersProcedure,
     updateUserRole: updateUserRoleProcedure,
     deleteUser: deleteUserProcedure,
+    listRoles: listRolesProcedure,
+    createRole: createRoleProcedure,
   }),
 });
 

@@ -1,9 +1,11 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import createContextHook from '@nkzw/create-context-hook';
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { User, UserRole } from '../types';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import createContextHook from "@nkzw/create-context-hook";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { User, UserRole } from "../types";
+import { trpcClient, setTrpcAuthToken } from "../lib/trpc";
 
-const AUTH_STORAGE_KEY = 'playtube_auth_user';
+const AUTH_USER_KEY = 'rork_auth_user';
+const AUTH_TOKEN_KEY = 'rork_auth_token';
 
 const resolveRoleDestination = (role: UserRole | null | undefined): string => {
   switch (role) {
@@ -18,248 +20,296 @@ const resolveRoleDestination = (role: UserRole | null | undefined): string => {
   }
 };
 
+type BackendUserPayload = {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  avatar: string | null;
+  bio: string;
+  channelId: string | null;
+  role: UserRole;
+  createdAt: string;
+  updatedAt?: string;
+  subscriptions: User['subscriptions'];
+  memberships: User['memberships'];
+  reactions: User['reactions'];
+  watchHistory: User['watchHistory'];
+  watchHistoryDetailed: User['watchHistoryDetailed'];
+  savedVideos: User['savedVideos'];
+  likedVideos: User['likedVideos'];
+  rolesAssignedBy?: string;
+};
+
+const mapBackendUser = (data: BackendUserPayload): User => ({
+  id: data.id,
+  email: data.email,
+  username: data.username,
+  displayName: data.displayName ?? data.username,
+  avatar: data.avatar ?? '',
+  bio: data.bio ?? '',
+  channelId: data.channelId ?? null,
+  role: data.role,
+  rolesAssignedBy: data.rolesAssignedBy,
+  subscriptions: data.subscriptions ?? [],
+  memberships: data.memberships ?? [],
+  reactions: data.reactions ?? [],
+  watchHistory: data.watchHistory ?? [],
+  watchHistoryDetailed: data.watchHistoryDetailed ?? [],
+  savedVideos: data.savedVideos ?? [],
+  likedVideos: data.likedVideos ?? [],
+  password: undefined,
+  createdAt: data.createdAt,
+});
+
+const parseStoredUser = (raw: string | null): BackendUserPayload | null => {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as BackendUserPayload;
+    return parsed;
+  } catch (error) {
+    console.error('AuthContext parseStoredUser error', error);
+    return null;
+  }
+};
+
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authToken, setAuthTokenState] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  useEffect(() => {
-    checkAuth();
+  const persistSession = useCallback(async (token: string, userPayload: BackendUserPayload) => {
+    await AsyncStorage.multiSet([
+      [AUTH_TOKEN_KEY, token],
+      [AUTH_USER_KEY, JSON.stringify(userPayload)],
+    ]);
+    setTrpcAuthToken(token);
+    setAuthTokenState(token);
   }, []);
 
-  const sanitizeUser = useCallback((user: User): User => {
-    const { password: _password, ...rest } = user;
-    return rest;
+  const clearSession = useCallback(async () => {
+    console.log('AuthContext clearSession');
+    await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_USER_KEY]);
+    setTrpcAuthToken(null);
+    setAuthTokenState(null);
+    setAuthUser(null);
+    setIsAuthenticated(false);
   }, []);
 
-  const checkAuth = async () => {
+  const bootstrapAuth = useCallback(async () => {
+    console.log('AuthContext bootstrapAuth start');
+    setIsAuthLoading(true);
     try {
-      const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        const user = JSON.parse(stored) as User;
-        const normalizedUser: User = {
-          ...user,
-          role: user.role ?? 'user',
-        };
-        setAuthUser(normalizedUser);
-        setIsAuthenticated(true);
+      const [storedToken, storedUserRaw] = await AsyncStorage.multiGet([AUTH_TOKEN_KEY, AUTH_USER_KEY]);
+      const token = storedToken?.[1] ?? null;
+      const userPayload = parseStoredUser(storedUserRaw?.[1] ?? null);
+
+      if (!token) {
+        await clearSession();
+        return;
       }
+
+      setTrpcAuthToken(token);
+      setAuthTokenState(token);
+
+      try {
+        const profile = await trpcClient.users.getProfile.query({});
+        if (profile?.success && profile.user) {
+          const mapped = mapBackendUser(profile.user as BackendUserPayload);
+          setAuthUser(mapped);
+          setIsAuthenticated(true);
+          await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile.user));
+          console.log('AuthContext bootstrapAuth success', mapped.id);
+          return;
+        }
+      } catch (error) {
+        console.error('AuthContext bootstrapAuth remote error', error);
+      }
+
+      if (userPayload) {
+        const mapped = mapBackendUser(userPayload);
+        setAuthUser(mapped);
+        setIsAuthenticated(true);
+        console.log('AuthContext bootstrapAuth fallback user', mapped.id);
+        return;
+      }
+
+      await clearSession();
     } catch (error) {
-      console.error('Auth check error:', error);
+      console.error('AuthContext bootstrapAuth failure', error);
+      await clearSession();
     } finally {
       setIsAuthLoading(false);
     }
-  };
+  }, [clearSession]);
 
-  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
-    try {
-      const usersData = await AsyncStorage.getItem('playtube_users');
-      if (!usersData) {
-        return { success: false, error: 'No users found. Please register first.' };
-      }
+  useEffect(() => {
+    bootstrapAuth();
+  }, [bootstrapAuth]);
 
-      const users: User[] = JSON.parse(usersData);
-      const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-
-      if (!user) {
-        return { success: false, error: 'Invalid email or password.' };
-      }
-
-      const sanitized = sanitizeUser(user);
-
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sanitized));
-      await AsyncStorage.setItem('playtube_current_user', JSON.stringify(sanitized));
-
-      setAuthUser(sanitized);
-      setIsAuthenticated(true);
-
-      return { success: true, user: sanitized, destination: resolveRoleDestination(sanitized.role) };
-    } catch (error) {
-      console.error('Login error:', error);
-      return { success: false, error: 'Login failed. Please try again.' };
-    }
-  }, [sanitizeUser]);
-
-  const register = useCallback(async (
-    email: string,
-    password: string,
-    username: string
-  ): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
-    try {
-      if (!email || !password || !username) {
-        return { success: false, error: 'All fields are required.' };
-      }
-
-      if (password.length < 6) {
-        return { success: false, error: 'Password must be at least 6 characters.' };
-      }
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return { success: false, error: 'Please enter a valid email address.' };
-      }
-
-      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-        return { success: false, error: 'Username can only contain letters, numbers, and underscores.' };
-      }
-
-      const usersData = await AsyncStorage.getItem('playtube_users');
-      const users: User[] = usersData ? JSON.parse(usersData) : [];
-
-      const emailExists = users.some((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (emailExists) {
-        return { success: false, error: 'Email already registered.' };
-      }
-
-      const usernameExists = users.some((u) => u.username.toLowerCase() === username.toLowerCase());
-      if (usernameExists) {
-        return { success: false, error: 'Username already taken.' };
-      }
-
-      const isSuperAdmin = email.toLowerCase() === '565413anil@gmail.com';
-
-      const newUser: User = {
-        id: `user${Date.now()}`,
-        email,
-        password,
-        username,
-        displayName: isSuperAdmin ? 'Super Admin' : username,
-        avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`,
-        bio: isSuperAdmin ? 'Super Administrator - Full Access' : '',
-        channelId: null,
-        role: isSuperAdmin ? 'superadmin' : 'user',
-        rolesAssignedBy: isSuperAdmin ? 'system' : undefined,
-        subscriptions: [],
-        memberships: [],
-        reactions: [],
-        watchHistory: [],
-        watchHistoryDetailed: [],
-        savedVideos: [],
-        likedVideos: [],
-        createdAt: new Date().toISOString(),
-      };
-
-      const updatedUsers = [...users, newUser];
-      await AsyncStorage.setItem('playtube_users', JSON.stringify(updatedUsers));
-
-      const sanitized = sanitizeUser(newUser);
-
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sanitized));
-      await AsyncStorage.setItem('playtube_current_user', JSON.stringify(sanitized));
-
-      setAuthUser(sanitized);
-      setIsAuthenticated(true);
-
-      return { success: true, user: sanitized, destination: resolveRoleDestination(sanitized.role) };
-    } catch (error) {
-      console.error('Register error:', error);
-      return { success: false, error: 'Registration failed. Please try again.' };
-    }
-  }, [sanitizeUser]);
-
-  const logout = useCallback(async () => {
-    try {
-      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-      setAuthUser(null);
-      setIsAuthenticated(false);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  }, []);
-
-  const updateAuthUser = useCallback(async (updates: Partial<User>) => {
-    if (!authUser) {
-      return;
-    }
-
-    try {
-      const updatedUser = sanitizeUser({ ...authUser, ...updates });
-
-      const usersData = await AsyncStorage.getItem('playtube_users');
-      if (usersData) {
-        const users: User[] = JSON.parse(usersData);
-        const userIndex = users.findIndex((u) => u.id === authUser.id);
-        if (userIndex >= 0) {
-          users[userIndex] = { ...users[userIndex], ...updates };
-          await AsyncStorage.setItem('playtube_users', JSON.stringify(users));
-        }
-      }
-
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser));
-      await AsyncStorage.setItem('playtube_current_user', JSON.stringify(updatedUser));
-      setAuthUser(updatedUser);
-    } catch (error) {
-      console.error('Update auth user error:', error);
-    }
-  }, [authUser, sanitizeUser]);
-
-  const isSuperAdmin = useCallback(() => {
-    return authUser?.role === 'superadmin' || authUser?.email === '565413anil@gmail.com';
-  }, [authUser]);
-
-  const isAdmin = useCallback(() => {
-    return authUser?.role === 'admin' || authUser?.role === 'superadmin';
-  }, [authUser]);
-
-  const isCreator = useCallback(() => {
-    return authUser?.role === 'creator';
-  }, [authUser]);
-
-  const roleDestination = useMemo(() => resolveRoleDestination(authUser?.role), [authUser?.role]);
-
-  const assignRole = useCallback(
-    async (targetUserId: string, role: UserRole, assignedBy: string) => {
+  const login = useCallback(
+    async (
+      email: string,
+      password: string
+    ): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
       try {
-        const usersData = await AsyncStorage.getItem('playtube_users');
-        if (!usersData) {
-          return { success: false, error: 'No users available.' };
+        const response = await trpcClient.auth.login.mutate({ email, password });
+
+        if (!response.success || !response.token || !response.user) {
+          return { success: false, error: response.error ?? 'Invalid login credentials.' };
         }
 
-        const users: User[] = JSON.parse(usersData);
-        const targetIndex = users.findIndex((u) => u.id === targetUserId);
-        if (targetIndex === -1) {
-          return { success: false, error: 'User not found.' };
-        }
+        const mapped = mapBackendUser(response.user as BackendUserPayload);
+        await persistSession(response.token, response.user as BackendUserPayload);
+        setAuthUser(mapped);
+        setIsAuthenticated(true);
+        console.log('AuthContext login success', mapped.id, mapped.role);
 
-        users[targetIndex] = {
-          ...users[targetIndex],
-          role,
-          rolesAssignedBy: assignedBy,
+        return {
+          success: true,
+          user: mapped,
+          destination: resolveRoleDestination(mapped.role),
         };
-
-        await AsyncStorage.setItem('playtube_users', JSON.stringify(users));
-
-        if (authUser?.id === targetUserId) {
-          const updatedCurrent = sanitizeUser(users[targetIndex]);
-          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedCurrent));
-          setAuthUser(updatedCurrent);
-        }
-
-        return { success: true };
       } catch (error) {
-        console.error('Assign role error:', error);
-        return { success: false, error: 'Unable to update role at this time.' };
+        console.error('AuthContext login error', error);
+        return { success: false, error: 'Unable to login. Please try again.' };
       }
     },
-    [authUser?.id, sanitizeUser]
+    [persistSession]
   );
+
+  const register = useCallback(
+    async (
+      email: string,
+      password: string,
+      username: string
+    ): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
+      try {
+        const response = await trpcClient.auth.register.mutate({
+          email,
+          password,
+          username,
+          displayName: username,
+        });
+
+        if (!response.success || !response.token || !response.user) {
+          return { success: false, error: response.error ?? 'Registration failed.' };
+        }
+
+        const mapped = mapBackendUser(response.user as BackendUserPayload);
+        await persistSession(response.token, response.user as BackendUserPayload);
+        setAuthUser(mapped);
+        setIsAuthenticated(true);
+        console.log('AuthContext register success', mapped.id, mapped.role);
+
+        return {
+          success: true,
+          user: mapped,
+          destination: resolveRoleDestination(mapped.role),
+        };
+      } catch (error) {
+        console.error('AuthContext register error', error);
+        return { success: false, error: 'Unable to register. Please try again.' };
+      }
+    },
+    [persistSession]
+  );
+
+  const logout = useCallback(async () => {
+    await clearSession();
+    console.log('AuthContext logout');
+  }, [clearSession]);
+
+  const updateAuthUser = useCallback(
+    async (updates: Partial<BackendUserPayload> & { newPassword?: string; currentPassword?: string }) => {
+      if (!authUser) {
+        return { success: false, error: 'No authenticated user.' } as const;
+      }
+
+      try {
+        const response = await trpcClient.users.updateProfile.mutate({
+          username: updates.username,
+          displayName: updates.displayName,
+          email: updates.email,
+          bio: updates.bio,
+          avatar: updates.avatar,
+          newPassword: updates.newPassword,
+          currentPassword: updates.currentPassword,
+        });
+
+        if (!response.success || !response.user) {
+          return { success: false, error: 'Unable to update profile.' } as const;
+        }
+
+        const mapped = mapBackendUser(response.user as BackendUserPayload);
+        setAuthUser(mapped);
+        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
+        console.log('AuthContext updateAuthUser', mapped.id);
+        return { success: true, user: mapped } as const;
+      } catch (error) {
+        console.error('AuthContext updateAuthUser error', error);
+        return { success: false, error: 'Profile update failed.' } as const;
+      }
+    },
+    [authUser]
+  );
+
+  const assignRole = useCallback(
+    async (targetUserId: string, role: UserRole) => {
+      try {
+        const response = await trpcClient.admin.updateUserRole.mutate({
+          targetUserId,
+          newRole: role,
+        });
+
+        if (!response.success || !response.user) {
+          return { success: false, error: 'Unable to assign role.' } as const;
+        }
+
+        if (authUser?.id === targetUserId) {
+          const mapped = mapBackendUser(response.user as BackendUserPayload);
+          setAuthUser(mapped);
+          await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
+        }
+
+        return { success: true, user: mapBackendUser(response.user as BackendUserPayload) } as const;
+      } catch (error) {
+        console.error('AuthContext assignRole error', error);
+        return { success: false, error: 'Role assignment failed.' } as const;
+      }
+    },
+    [authUser]
+  );
+
+  const isSuperAdmin = useCallback(() => authUser?.role === 'superadmin', [authUser]);
+  const isAdmin = useCallback(() => authUser?.role === 'admin' || authUser?.role === 'superadmin', [authUser]);
+  const isCreator = useCallback(() => authUser?.role === 'creator', [authUser]);
+
+  const roleDestination = useMemo(() => resolveRoleDestination(authUser?.role), [authUser?.role]);
 
   const value = useMemo(
     () => ({
       authUser,
+      authToken,
       isAuthLoading,
       isAuthenticated,
       login,
       register,
       logout,
       updateAuthUser,
+      assignRole,
       isSuperAdmin,
       isAdmin,
       isCreator,
       roleDestination,
-      assignRole,
     }),
     [
       assignRole,
+      authToken,
       authUser,
       isAdmin,
       isAuthenticated,

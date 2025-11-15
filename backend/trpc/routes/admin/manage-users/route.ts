@@ -1,50 +1,70 @@
 import { z } from "zod";
-import { publicProcedure } from "../../../create-context";
+import { adminProcedure, superAdminProcedure } from "../../../create-context";
+import { deleteUserById, listUsers, updateUser } from "../../../../utils/database";
 
-export const getAllUsersProcedure = publicProcedure
-  .input(
-    z.object({
-      adminUserId: z.string(),
-    })
-  )
-  .query(async ({ input }) => {
-    console.log("[Backend] Get all users by admin:", input.adminUserId);
-    
+const sanitizeUser = (user: ReturnType<typeof listUsers>[number]) => ({
+  id: user.id,
+  email: user.email,
+  username: user.username,
+  displayName: user.displayName,
+  avatar: user.avatar,
+  bio: user.bio,
+  channelId: user.channelId,
+  role: user.role,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+});
+
+export const getAllUsersProcedure = adminProcedure
+  .input(z.void())
+  .query(({ ctx }) => {
+    const users = listUsers();
+
     return {
       success: true,
-      message: "Users managed through frontend",
-    };
+      users: users.map(sanitizeUser),
+      requestedBy: ctx.user?.id,
+    } as const;
   });
 
-export const updateUserRoleProcedure = publicProcedure
+export const updateUserRoleProcedure = superAdminProcedure
   .input(
     z.object({
-      adminUserId: z.string(),
       targetUserId: z.string(),
-      newRole: z.enum(["user", "admin", "superadmin"]),
+      newRole: z.enum(["user", "creator", "admin", "superadmin"]),
     })
   )
-  .mutation(async ({ input }) => {
-    console.log("[Backend] Update user role:", input.targetUserId, "to", input.newRole);
-    
+  .mutation(({ input, ctx }) => {
+    if (ctx.user?.id === input.targetUserId) {
+      throw new Error("Super admin cannot change their own role");
+    }
+
+    const updated = updateUser(input.targetUserId, {
+      role: input.newRole,
+      rolesAssignedBy: ctx.user?.id,
+    });
+
     return {
       success: true,
-      message: `User role updated to ${input.newRole}`,
-    };
+      user: sanitizeUser(updated),
+    } as const;
   });
 
-export const deleteUserProcedure = publicProcedure
+export const deleteUserProcedure = adminProcedure
   .input(
     z.object({
-      adminUserId: z.string(),
       targetUserId: z.string(),
     })
   )
-  .mutation(async ({ input }) => {
-    console.log("[Backend] Delete user:", input.targetUserId);
-    
+  .mutation(({ input, ctx }) => {
+    if (ctx.user?.role !== "superadmin" && ctx.user?.id === input.targetUserId) {
+      throw new Error("Cannot delete your own account");
+    }
+
+    deleteUserById(input.targetUserId);
+
     return {
       success: true,
-      message: "User deleted successfully",
-    };
+      targetUserId: input.targetUserId,
+    } as const;
   });

@@ -15,11 +15,28 @@ const getBaseUrl = () => {
   );
 };
 
+let authToken: string | null = null;
+
+export const setTrpcAuthToken = (token: string | null) => {
+  authToken = token;
+};
+
+export const getTrpcAuthToken = () => authToken;
+
 export const trpcClient = trpc.createClient({
   links: [
     httpLink({
       url: `${getBaseUrl()}/api/trpc`,
       transformer: superjson,
+      headers() {
+        if (!authToken) {
+          return {};
+        }
+
+        return {
+          authorization: `Bearer ${authToken}`,
+        };
+      },
     }),
   ],
 });
