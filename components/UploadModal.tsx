@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as VideoThumbnails from "expo-video-thumbnails";
-import * as Notifications from "expo-notifications";
 import { X, Video as VideoIcon, Camera, Image as ImageIcon, Calendar } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
@@ -331,16 +330,6 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
       await addVideo(newVideo);
 
       setProgress({ progress: 100, status: "completed", message: "Upload completed!" });
-
-      if (Platform.OS !== "web") {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Upload Complete! 🎉",
-            body: `Your ${uploadData.isShort ? "Short" : "video"} "${uploadData.title}" has been uploaded.`,
-          },
-          trigger: null,
-        });
-      }
 
       setTimeout(() => {
         Alert.alert("Success", "Video uploaded successfully!", [
