@@ -14,8 +14,8 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Mail, Lock } from 'lucide-react-native';
-import { theme } from '@/constants/theme';
-import { useAuth } from '@/contexts/AuthContext';
+import { theme } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -37,8 +37,9 @@ export default function LoginScreen() {
     setIsLoading(false);
 
     if (result.success) {
+      const destination = result.destination || '/(tabs)';
       Alert.alert('Success', 'Logged in successfully!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') }
+        { text: 'OK', onPress: () => router.replace(destination) }
       ]);
     } else {
       Alert.alert('Error', result.error || 'Login failed');
@@ -121,7 +122,7 @@ export default function LoginScreen() {
             disabled={isLoading}
           >
             <Text style={styles.registerLinkText}>
-              Don't have an account?{' '}
+              Don’t have an account?{' '}
               <Text style={styles.registerLinkTextBold}>Register</Text>
             </Text>
           </TouchableOpacity>

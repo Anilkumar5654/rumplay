@@ -38,6 +38,7 @@ export interface Monetization {
 export interface Channel {
   id: string;
   name: string;
+  handle?: string;
   avatar: string;
   banner: string;
   description: string;
@@ -124,7 +125,7 @@ export interface UserReaction {
   timestamp: string;
 }
 
-export type UserRole = 'user' | 'admin' | 'superadmin';
+export type UserRole = 'user' | 'creator' | 'admin' | 'superadmin';
 
 export interface User {
   id: string;
@@ -136,6 +137,7 @@ export interface User {
   bio: string;
   channelId: string | null;
   role: UserRole;
+  rolesAssignedBy?: string;
   subscriptions: Subscription[];
   memberships: Membership[];
   reactions: UserReaction[];

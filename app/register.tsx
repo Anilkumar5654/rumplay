@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Mail, Lock, User as UserIcon, AtSign } from 'lucide-react-native';
-import { theme } from '@/constants/theme';
-import { useAuth } from '@/contexts/AuthContext';
+import { ArrowLeft, Mail, Lock, AtSign } from 'lucide-react-native';
+import { theme } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -24,19 +24,12 @@ export default function RegisterScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!email.trim() || !password.trim() || !username.trim() || !displayName.trim()) {
+    if (!email.trim() || !password.trim() || !username.trim()) {
       Alert.alert('Error', 'Please fill in all fields.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
       return;
     }
 
@@ -46,12 +39,13 @@ export default function RegisterScreen() {
     }
 
     setIsLoading(true);
-    const result = await register(email.trim(), password, username.trim(), displayName.trim());
+    const result = await register(email.trim(), password, username.trim());
     setIsLoading(false);
 
     if (result.success) {
+      const destination = result.destination || '/(tabs)';
       Alert.alert('Success', 'Account created successfully!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') }
+        { text: 'OK', onPress: () => router.replace(destination) }
       ]);
     } else {
       Alert.alert('Error', result.error || 'Registration failed');
@@ -97,20 +91,6 @@ export default function RegisterScreen() {
 
           <View style={styles.inputGroup}>
             <View style={styles.inputIcon}>
-              <UserIcon color={theme.colors.textSecondary} size={20} />
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Display Name"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={displayName}
-              onChangeText={setDisplayName}
-              editable={!isLoading}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <View style={styles.inputIcon}>
               <AtSign color={theme.colors.textSecondary} size={20} />
             </View>
             <TextInput
@@ -139,21 +119,6 @@ export default function RegisterScreen() {
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <View style={styles.inputIcon}>
-              <Lock color={theme.colors.textSecondary} size={20} />
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              editable={!isLoading}
-            />
-          </View>
-
           <TouchableOpacity
             style={[styles.registerButton, isLoading && styles.registerButtonDisabled]}
             onPress={handleRegister}
@@ -165,12 +130,6 @@ export default function RegisterScreen() {
               <Text style={styles.registerButtonText}>Register</Text>
             )}
           </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
 
           <TouchableOpacity
             style={styles.loginLink}
@@ -250,21 +209,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: theme.fontSizes.md,
     fontWeight: 'bold' as const,
-  },
-  divider: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    marginVertical: theme.spacing.xl,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.colors.border,
-  },
-  dividerText: {
-    marginHorizontal: theme.spacing.md,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSizes.sm,
   },
   loginLink: {
     alignItems: 'center' as const,
