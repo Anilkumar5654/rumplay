@@ -105,6 +105,13 @@ type AuthMeResponse = {
   error?: string;
 };
 
+type AuthApiResponse = {
+  success: boolean;
+  token?: string;
+  user?: BackendUserPayload;
+  error?: string;
+};
+
 const mapBackendUser = (data: BackendUserPayload): User => ({
   id: data.id,
   email: data.email,
@@ -156,6 +163,42 @@ const resolveAuthErrorMessage = (error: unknown): string => {
     }
   }
   return "Unable to process the request. Please try again.";
+};
+
+const performAuthMutation = async (path: string, payload: Record<string, unknown>): Promise<AuthApiResponse> => {
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}${path}`;
+  console.log(`[AuthContext] POST ${url}`);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      const raw = await response.text();
+      console.error("AuthContext performAuthMutation non-JSON response", contentType, raw);
+      return { success: false, error: "Server returned invalid response. Expected JSON." };
+    }
+
+    const data = (await response.json()) as AuthApiResponse;
+
+    if (!response.ok && !data.error) {
+      console.warn("AuthContext performAuthMutation non-OK without error", response.status);
+      return { success: false, error: `Request failed with status ${response.status}` };
+    }
+
+    return data;
+  } catch (error) {
+    console.error("AuthContext performAuthMutation error", error);
+    throw error;
+  }
 };
 
 const fetchCurrentUser = async (token: string): Promise<BackendUserPayload | null> => {
@@ -309,11 +352,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       password: string
     ): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
       try {
-        const response = await trpcClient.auth.login.mutate({ email, password });
-
-        if (!response || typeof response !== "object") {
-          return { success: false, error: "Invalid response from server." };
-        }
+        const response = await performAuthMutation("/api/auth/login", { email, password });
 
         if (!response.success) {
           return { success: false, error: response.error ?? "Invalid login credentials." };
@@ -324,7 +363,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
 
         await persistSession(response.token);
-        const mapped = mapBackendUser(response.user as BackendUserPayload);
+        const mapped = mapBackendUser(response.user);
         setAuthUser(mapped);
         setIsAuthenticated(true);
         setAuthError(null);
@@ -354,16 +393,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       username: string
     ): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
       try {
-        const response = await trpcClient.auth.register.mutate({
+        const response = await performAuthMutation("/api/auth/register", {
           email,
           password,
           username,
           displayName: username,
         });
-
-        if (!response || typeof response !== "object") {
-          return { success: false, error: "Invalid response from server." };
-        }
 
         if (!response.success) {
           return { success: false, error: response.error ?? "Registration failed." };
@@ -374,7 +409,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
 
         await persistSession(response.token);
-        const mapped = mapBackendUser(response.user as BackendUserPayload);
+        const mapped = mapBackendUser(response.user);
         setAuthUser(mapped);
         setIsAuthenticated(true);
         setAuthError(null);
