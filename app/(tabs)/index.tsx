@@ -9,9 +9,11 @@ import {
   Image,
   TextInput,
   Dimensions,
+  RefreshControl,
 } from "react-native";
 
-import { Search, Mic } from "lucide-react-native";
+import { Search, Mic, Plus } from "lucide-react-native";
+import UploadModal from "@/components/UploadModal";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "@/constants/theme";
@@ -27,6 +29,8 @@ export default function HomeScreen() {
   const { videos, currentUser } = useAppState();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const shorts = videos.filter((v) => v.isShort);
   const regularVideos = videos.filter((v) => !v.isShort);
@@ -66,6 +70,12 @@ export default function HomeScreen() {
     if (diffMins < 60) return `${diffMins} minutes ago`;
     if (diffHours < 24) return `${diffHours} hours ago`;
     return `${diffDays} days ago`;
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setRefreshing(false);
   };
 
   const renderShortItem = ({ item }: { item: Video }) => (
@@ -112,7 +122,15 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
-        <Text style={styles.logo}>PlayTube</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.logo}>PlayTube</Text>
+          <TouchableOpacity
+            style={styles.uploadButton}
+            onPress={() => setUploadModalVisible(true)}
+          >
+            <Plus color={theme.colors.primary} size={24} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.searchContainer}>
           <Search color={theme.colors.textSecondary} size={20} />
           <TextInput
@@ -132,6 +150,9 @@ export default function HomeScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[0]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         <View style={styles.categoriesContainer}>
           <ScrollView
@@ -182,6 +203,14 @@ export default function HomeScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <UploadModal
+        visible={uploadModalVisible}
+        onClose={() => setUploadModalVisible(false)}
+        onUploadComplete={() => {
+          setUploadModalVisible(false);
+        }}
+      />
     </View>
   );
 }
@@ -198,11 +227,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  headerTop: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "center" as const,
+    marginBottom: theme.spacing.sm,
+  },
   logo: {
     fontSize: theme.fontSizes.xl,
     fontWeight: "bold" as const,
     color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
+  },
+  uploadButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
   },
   searchContainer: {
     flexDirection: "row" as const,

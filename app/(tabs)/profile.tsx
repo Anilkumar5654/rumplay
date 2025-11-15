@@ -1,27 +1,98 @@
-import React from "react";
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from "react-native";
+import React, { useState, useMemo } from "react";
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, FlatList, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Settings, History, ThumbsUp, Bookmark, ListVideo } from "lucide-react-native";
+import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit } from "lucide-react-native";
+import VideoEditModal from "@/components/VideoEditModal";
+import { Video } from "@/types";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
+
+const { width } = Dimensions.get("window");
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, channels } = useAppState();
+  const { currentUser, channels, videos } = useAppState();
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
 
   const userChannel = currentUser.channelId 
     ? channels.find((ch) => ch.id === currentUser.channelId)
     : null;
 
+  const myVideos = useMemo(() => {
+    return videos.filter((v) => v.uploaderId === currentUser.id || v.channelId === currentUser.channelId);
+  }, [videos, currentUser.id, currentUser.channelId]);
+
+  const myShorts = myVideos.filter((v) => v.isShort);
+  const myRegularVideos = myVideos.filter((v) => !v.isShort);
+
   const menuItems = [
+    { icon: VideoIcon, label: "My Videos", count: myVideos.length, route: null, onPress: () => {} },
     { icon: History, label: "History", count: currentUser.watchHistory.length, route: null },
     { icon: ThumbsUp, label: "Liked Videos", count: currentUser.likedVideos.length, route: null },
     { icon: Bookmark, label: "Saved Videos", count: currentUser.savedVideos.length, route: null },
     { icon: ListVideo, label: "Playlists", count: 0, route: null },
     { icon: Settings, label: "Settings", count: null, route: "/settings" },
   ];
+
+  const handleEditVideo = (video: Video) => {
+    setSelectedVideo(video);
+    setEditModalVisible(true);
+  };
+
+  const formatViews = (views: number): string => {
+    if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
+    if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
+    return views.toString();
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const renderVideoItem = (video: Video) => (
+    <TouchableOpacity
+      key={video.id}
+      style={styles.videoItem}
+      onPress={() => router.push(`/video/${video.id}`)}
+    >
+      <View style={styles.videoThumbnailContainer}>
+        <Image source={{ uri: video.thumbnail }} style={styles.videoItemThumbnail} />
+        <View style={styles.durationBadge}>
+          <Text style={styles.durationText}>{formatDuration(video.duration)}</Text>
+        </View>
+        {video.visibility !== "public" && (
+          <View style={styles.visibilityBadge}>
+            <Text style={styles.visibilityBadgeText}>
+              {video.visibility?.toUpperCase()}
+            </Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.videoItemInfo}>
+        <Text style={styles.videoItemTitle} numberOfLines={2}>
+          {video.title}
+        </Text>
+        <Text style={styles.videoItemStats}>
+          {formatViews(video.views)} views • {video.likes} likes
+        </Text>
+        <TouchableOpacity
+          style={styles.editVideoButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleEditVideo(video);
+          }}
+        >
+          <Edit color={theme.colors.primary} size={16} />
+          <Text style={styles.editVideoText}>Edit</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
@@ -69,23 +140,59 @@ export default function ProfileScreen() {
           {menuItems.map((item) => {
             const Icon = item.icon;
             return (
-              <TouchableOpacity 
-                key={item.label} 
-                style={styles.menuItem}
-                onPress={() => item.route && router.push(item.route)}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Icon color={theme.colors.text} size={24} />
-                  <Text style={styles.menuItemLabel}>{item.label}</Text>
-                </View>
-                {item.count !== null && (
-                  <Text style={styles.menuItemCount}>{item.count}</Text>
+              <View key={item.label}>
+                <TouchableOpacity 
+                  style={styles.menuItem}
+                  onPress={() => item.route && router.push(item.route)}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Icon color={theme.colors.text} size={24} />
+                    <Text style={styles.menuItemLabel}>{item.label}</Text>
+                  </View>
+                  {item.count !== null && (
+                    <Text style={styles.menuItemCount}>{item.count}</Text>
+                  )}
+                </TouchableOpacity>
+                
+                {item.label === "My Videos" && myVideos.length > 0 && (
+                  <View style={styles.myVideosSection}>
+                    {myRegularVideos.length > 0 && (
+                      <View style={styles.videoTypeSection}>
+                        <Text style={styles.videoTypeTitle}>Videos ({myRegularVideos.length})</Text>
+                        <View style={styles.videosGrid}>
+                          {myRegularVideos.map(renderVideoItem)}
+                        </View>
+                      </View>
+                    )}
+                    
+                    {myShorts.length > 0 && (
+                      <View style={styles.videoTypeSection}>
+                        <Text style={styles.videoTypeTitle}>Shorts ({myShorts.length})</Text>
+                        <View style={styles.videosGrid}>
+                          {myShorts.map(renderVideoItem)}
+                        </View>
+                      </View>
+                    )}
+                  </View>
                 )}
-              </TouchableOpacity>
+              </View>
             );
           })}
         </View>
       </ScrollView>
+
+      <VideoEditModal
+        visible={editModalVisible}
+        video={selectedVideo}
+        onClose={() => {
+          setEditModalVisible(false);
+          setSelectedVideo(null);
+        }}
+        onUpdate={() => {
+          setEditModalVisible(false);
+          setSelectedVideo(null);
+        }}
+      />
     </View>
   );
 }
@@ -209,5 +316,90 @@ const styles = StyleSheet.create({
   menuItemCount: {
     fontSize: theme.fontSizes.sm,
     color: theme.colors.textSecondary,
+  },
+  myVideosSection: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+  },
+  videoTypeSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  videoTypeTitle: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: "600" as const,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  videosGrid: {
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: theme.spacing.sm,
+  },
+  videoItem: {
+    width: (width - theme.spacing.md * 3) / 2,
+    marginBottom: theme.spacing.md,
+  },
+  videoThumbnailContainer: {
+    position: "relative" as const,
+  },
+  videoItemThumbnail: {
+    width: "100%",
+    height: 100,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.border,
+  },
+  durationBadge: {
+    position: "absolute" as const,
+    bottom: theme.spacing.xs,
+    right: theme.spacing.xs,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
+  },
+  durationText: {
+    color: "#FFFFFF",
+    fontSize: theme.fontSizes.xs,
+    fontWeight: "600" as const,
+  },
+  visibilityBadge: {
+    position: "absolute" as const,
+    top: theme.spacing.xs,
+    left: theme.spacing.xs,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
+  },
+  visibilityBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "bold" as const,
+  },
+  videoItemInfo: {
+    marginTop: theme.spacing.xs,
+  },
+  videoItemTitle: {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: "500" as const,
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  videoItemStats: {
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.xs,
+  },
+  editVideoButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+    paddingVertical: 4,
+  },
+  editVideoText: {
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.primary,
+    fontWeight: "600" as const,
   },
 });

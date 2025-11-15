@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,7 +18,7 @@ import { useAppState } from "@/contexts/AppStateContext";
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, saveCurrentUser } = useAppState();
+  const { currentUser, saveCurrentUser, isUsernameUnique } = useAppState();
 
   const [displayName, setDisplayName] = useState(currentUser.displayName);
   const [username, setUsername] = useState(currentUser.username);
@@ -25,6 +26,31 @@ export default function EditProfileScreen() {
   const [bio, setBio] = useState(currentUser.bio);
 
   const handleSave = async () => {
+    if (!displayName.trim()) {
+      Alert.alert("Error", "Display name is required.");
+      return;
+    }
+
+    if (!username.trim() || username.length < 3) {
+      Alert.alert("Error", "Username must be at least 3 characters.");
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      Alert.alert("Error", "Username can only contain letters, numbers, and underscores.");
+      return;
+    }
+
+    if (username !== currentUser.username && !isUsernameUnique(username, currentUser.id)) {
+      Alert.alert("Error", "This username is already taken.");
+      return;
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      Alert.alert("Error", "Please enter a valid email address.");
+      return;
+    }
+
     const updatedUser = {
       ...currentUser,
       displayName,
@@ -32,8 +58,11 @@ export default function EditProfileScreen() {
       email,
       bio,
     };
+    
     await saveCurrentUser(updatedUser);
-    router.back();
+    Alert.alert("Success", "Profile updated successfully!", [
+      { text: "OK", onPress: () => router.back() },
+    ]);
   };
 
   return (
@@ -79,6 +108,7 @@ export default function EditProfileScreen() {
               placeholderTextColor={theme.colors.textSecondary}
               autoCapitalize="none"
             />
+            <Text style={styles.helperText}>Only letters, numbers, and underscores allowed</Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -177,5 +207,10 @@ const styles = StyleSheet.create({
   textArea: {
     height: 100,
     textAlignVertical: "top" as const,
+  },
+  helperText: {
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.xs,
   },
 });

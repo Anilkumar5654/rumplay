@@ -227,6 +227,8 @@ export const mockVideos: Video[] = [
     comments: [],
     isShort: false,
     isLive: false,
+    visibility: 'public' as const,
+    uploaderId: 'user1',
   },
   {
     id: 'v4',
@@ -330,6 +332,7 @@ export const mockUsers: User[] = [
     avatar: 'https://i.pravatar.cc/150?img=30',
     bio: 'Content creator and tech enthusiast',
     channelId: 'ch1',
+    watchHistoryDetailed: [],
     subscriptions: [
       { channelId: 'ch2', subscribedAt: '2024-06-01T00:00:00Z', notifications: true },
       { channelId: 'ch4', subscribedAt: '2024-08-15T00:00:00Z', notifications: true },

@@ -79,6 +79,9 @@ export interface Video {
   comments: Comment[];
   isShort: boolean;
   isLive: boolean;
+  visibility?: 'public' | 'private' | 'unlisted' | 'scheduled';
+  scheduledDate?: string;
+  uploaderId?: string;
 }
 
 export interface Playlist {
@@ -193,4 +196,18 @@ export interface VideoUploadData {
   thumbnailUri: string;
   duration: number;
   isShort: boolean;
+  visibility: 'public' | 'private' | 'unlisted' | 'scheduled';
+  scheduledDate?: string;
+}
+
+export interface VideoAnalytics {
+  videoId: string;
+  views: number;
+  likes: number;
+  dislikes: number;
+  comments: number;
+  watchTime: number;
+  shares: number;
+  averageViewDuration: number;
+  retentionRate: number;
 }

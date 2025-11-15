@@ -324,6 +324,18 @@ export const [AppStateProvider, useAppState] = createContextHook(() => {
     }
   }, [reports, videos, channels, updateChannel]);
 
+  const isChannelNameUnique = useCallback((name: string, excludeChannelId?: string): boolean => {
+    return !channels.some(ch => 
+      ch.name.toLowerCase() === name.toLowerCase() && ch.id !== excludeChannelId
+    );
+  }, [channels]);
+
+  const isUsernameUnique = useCallback((username: string, excludeUserId?: string): boolean => {
+    return !users.some(u => 
+      u.username.toLowerCase() === username.toLowerCase() && u.id !== excludeUserId
+    );
+  }, [users]);
+
   return {
     videos,
     channels,
@@ -348,5 +360,7 @@ export const [AppStateProvider, useAppState] = createContextHook(() => {
     savePlaylists,
     addReport,
     getWatchPosition,
+    isChannelNameUnique,
+    isUsernameUnique,
   };
 });
