@@ -33,19 +33,29 @@ export default function LoginScreen() {
       return;
     }
 
+    console.log('[LoginScreen] Starting login...');
     setIsLoading(true);
     const normalizedEmail = email.trim().toLowerCase();
-    const result = await login(normalizedEmail, password);
-    setIsLoading(false);
+    console.log('[LoginScreen] Calling login with email:', normalizedEmail);
+    
+    try {
+      const result = await login(normalizedEmail, password);
+      console.log('[LoginScreen] Login result:', result.success ? 'SUCCESS' : 'FAILED');
+      setIsLoading(false);
 
-    if (result.success) {
-      const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
-      const destination = redirectPath ?? result.destination ?? '/(tabs)/home';
-      Alert.alert('Success', 'Logged in successfully!', [
-        { text: 'OK', onPress: () => router.replace(destination) }
-      ]);
-    } else {
-      Alert.alert('Error', result.error || 'Login failed');
+      if (result.success) {
+        const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
+        const destination = redirectPath ?? result.destination ?? '/(tabs)/home';
+        Alert.alert('Success', 'Logged in successfully!', [
+          { text: 'OK', onPress: () => router.replace(destination) }
+        ]);
+      } else {
+        Alert.alert('Error', result.error || 'Login failed');
+      }
+    } catch (error) {
+      console.error('[LoginScreen] Unexpected error:', error);
+      setIsLoading(false);
+      Alert.alert('Error', 'An unexpected error occurred. Please check the console.');
     }
   };
 
