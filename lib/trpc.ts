@@ -156,7 +156,12 @@ export const getApiBaseUrl = () => {
     return cachedBaseUrl;
   }
 
-  throw new Error("Missing EXPO_PUBLIC_API_URL environment variable and unable to derive a fallback base URL");
+  const defaultFallback = sanitizeUrl("http://localhost:8787");
+  console.warn(
+    "Falling back to default API base URL http://localhost:8787. Set EXPO_PUBLIC_API_URL to your backend endpoint for proper configuration."
+  );
+  cachedBaseUrl = defaultFallback;
+  return cachedBaseUrl;
 };
 
 let authToken: string | null = null;
