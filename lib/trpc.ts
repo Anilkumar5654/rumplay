@@ -41,6 +41,19 @@ const sanitizeUrl = (value: string) => {
   return withoutTrailingSlash;
 };
 
+const isLoopbackHostname = (hostname: string) => {
+  const normalized = hostname.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  if (normalized === "localhost" || normalized === "::1" || normalized === "0.0.0.0") {
+    return true;
+  }
+
+  return normalized.startsWith("127.");
+};
+
 const BUNDLER_PORTS = new Set([
   "19000",
   "19001",
@@ -138,7 +151,21 @@ export const getApiBaseUrl = () => {
 
   const explicitUrl = resolveEnv("EXPO_PUBLIC_API_URL");
   if (explicitUrl && explicitUrl.length > 0) {
-    cachedBaseUrl = sanitizeUrl(explicitUrl);
+    const sanitized = sanitizeUrl(explicitUrl);
+    try {
+      const parsed = new URL(sanitized);
+      if (Platform.OS !== "web" && isLoopbackHostname(parsed.hostname)) {
+        const expoHostUrlOverride = guessFromExpoHost();
+        if (expoHostUrlOverride) {
+          console.warn("EXPO_PUBLIC_API_URL points to a loopback host. Using Expo host derived URL instead:", expoHostUrlOverride);
+          cachedBaseUrl = expoHostUrlOverride;
+          return cachedBaseUrl;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to parse EXPO_PUBLIC_API_URL", sanitized, error);
+    }
+    cachedBaseUrl = sanitized;
     return cachedBaseUrl;
   }
 
