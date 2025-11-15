@@ -1,26 +1,33 @@
-import { findUserByEmail, createUser } from "../utils/database";
+import { findUserByEmail, createUser, updateUser } from "../utils/database";
 import { SUPER_ADMIN_EMAIL } from "../constants/auth";
 
 const ensureSuperadmin = () => {
   try {
     const existing = findUserByEmail(SUPER_ADMIN_EMAIL);
+    const newPassword = "SuperAdmin#2025$Secure!xyz";
     
     if (existing) {
       console.log(`✓ Superadmin user already exists: ${SUPER_ADMIN_EMAIL}`);
       console.log(`  - User ID: ${existing.id}`);
-      console.log(`  - Role: ${existing.role}`);
-      console.log(`  - Username: ${existing.username}`);
+      console.log(`  - Updating password...`);
+      
+      updateUser(existing.id, {
+        password: newPassword,
+        role: "superadmin",
+      });
+      
+      console.log(`✓ Password updated successfully`);
+      console.log(`  - New Password: ${newPassword}`);
       return existing;
     }
 
     console.log(`Creating superadmin user: ${SUPER_ADMIN_EMAIL}`);
-    const tempPassword = "tempPassword123!";
     
     const user = createUser({
       email: SUPER_ADMIN_EMAIL,
       username: "superadmin",
       displayName: "Super Admin",
-      password: tempPassword,
+      password: newPassword,
       role: "superadmin",
     });
 
@@ -28,7 +35,7 @@ const ensureSuperadmin = () => {
     console.log(`  - User ID: ${user.id}`);
     console.log(`  - Email: ${user.email}`);
     console.log(`  - Username: ${user.username}`);
-    console.log(`  - Temporary Password: ${tempPassword}`);
+    console.log(`  - Password: ${newPassword}`);
     
     return user;
   } catch (error) {
