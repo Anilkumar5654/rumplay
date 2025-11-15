@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,24 +7,34 @@ import {
   Image,
   Animated,
   PanResponder,
-  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Play, Pause, X } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useAppState } from "@/contexts/AppStateContext";
+import { Video as AppVideo } from "@/types";
 
-const { width } = Dimensions.get("window");
 const MINI_PLAYER_HEIGHT = 80;
-const MINI_PLAYER_WIDTH = width - 32;
+const FALLBACK_THUMBNAIL = "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=200&q=60";
 
 export default function MiniPlayer() {
   const router = useRouter();
   const { currentVideoId, isPlaying, play, pause, closePlayer, showMiniPlayer } = usePlayer();
   const { getVideoById } = useAppState();
 
-  const video = currentVideoId ? getVideoById(currentVideoId) : null;
+  const video = useMemo<AppVideo | null>(() => {
+    if (!currentVideoId) {
+      return null;
+    }
+
+    try {
+      return getVideoById(currentVideoId) ?? null;
+    } catch (error) {
+      console.error('MiniPlayer getVideoById error', error);
+      return null;
+    }
+  }, [currentVideoId, getVideoById]);
 
   const panY = React.useRef(new Animated.Value(0)).current;
 
@@ -81,6 +91,7 @@ export default function MiniPlayer() {
 
   return (
     <Animated.View
+      testID="mini-player"
       style={[
         styles.container,
         {
@@ -90,7 +101,7 @@ export default function MiniPlayer() {
       {...panResponder.panHandlers}
     >
       <TouchableOpacity style={styles.content} onPress={handleTap} activeOpacity={0.9}>
-        <Image source={{ uri: video.thumbnail }} style={styles.thumbnail} />
+        <Image source={{ uri: video.thumbnail || FALLBACK_THUMBNAIL }} style={styles.thumbnail} />
         <View style={styles.info}>
           <Text style={styles.title} numberOfLines={1}>
             {video.title}

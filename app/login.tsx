@@ -127,11 +127,6 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.demoSection}>
-            <Text style={styles.demoTitle}>Demo Accounts:</Text>
-            <Text style={styles.demoText}>Super Admin: 565413anil@gmail.com / admin123</Text>
-            <Text style={styles.demoText}>User: user@playtube.com / user123</Text>
-          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -227,24 +222,5 @@ const styles = StyleSheet.create({
   registerLinkTextBold: {
     color: theme.colors.primary,
     fontWeight: 'bold' as const,
-  },
-  demoSection: {
-    marginTop: theme.spacing.xxl,
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  demoTitle: {
-    fontSize: theme.fontSizes.sm,
-    fontWeight: '600' as const,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  demoText: {
-    fontSize: theme.fontSizes.xs,
-    color: theme.colors.textSecondary,
-    marginBottom: 4,
   },
 });

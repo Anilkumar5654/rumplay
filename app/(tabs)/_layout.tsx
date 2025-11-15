@@ -1,15 +1,33 @@
 import { Tabs } from "expo-router";
 import { Home, Compass, PlaySquare, Tv } from "lucide-react-native";
-import React from "react";
-import { View, Image, StyleSheet } from "react-native";
+import React, { useEffect } from "react";
+import { View, Image, StyleSheet, ActivityIndicator } from "react-native";
 import { theme } from "@/constants/theme";
 import MiniPlayer from "@/components/MiniPlayer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 
 export default function TabLayout() {
-  const { authUser, isAuthenticated } = useAuth();
+  const { authUser, isAuthenticated, isAuthLoading } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
+
+  if (isAuthLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color={theme.colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -92,6 +110,12 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.background,
+  },
   profileImage: {
     width: 28,
     height: 28,
