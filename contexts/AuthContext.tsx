@@ -5,22 +5,25 @@ import * as SecureStore from "expo-secure-store";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Platform } from "react-native";
 import type { User, UserRole } from "../types";
-import { trpcClient, setTrpcAuthToken, getApiBaseUrl } from "../lib/trpc";
+import { trpcClient, setTrpcAuthToken } from "../lib/trpc";
 
 const AUTH_USER_KEY = "rork_auth_user";
 const AUTH_TOKEN_KEY = "rork_auth_token";
 
-const resolveRoleDestination = (role: UserRole | null | undefined): string => {
-  switch (role) {
-    case "superadmin":
-      return "/super-admin";
-    case "admin":
-      return "/admin-dashboard";
-    case "creator":
-      return "/creator-studio";
-    default:
-      return "/(tabs)/home";
+let hasLoggedMissingApiBase = false;
+
+const ensureLeadingSlash = (path: string) => (path.startsWith("/") ? path : `/${path}`);
+
+const getEnvApiBaseUrl = (): string => {
+  const api = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (!api) {
+    if (!hasLoggedMissingApiBase) {
+      console.error("AuthContext missing EXPO_PUBLIC_API_URL environment variable. Set it in app config.");
+      hasLoggedMissingApiBase = true;
+    }
+    return "";
   }
+  return api.replace(/\/+$/, "");
 };
 
 const secureStoreAvailable = Platform.OS !== "web" && typeof SecureStore.getItemAsync === "function";
@@ -103,6 +106,7 @@ type AuthMeResponse = {
   success: boolean;
   user?: BackendUserPayload;
   error?: string;
+  message?: string;
 };
 
 type AuthApiResponse = {
@@ -110,7 +114,12 @@ type AuthApiResponse = {
   token?: string;
   user?: BackendUserPayload;
   error?: string;
+  message?: string;
 };
+
+type AuthHandlerResult =
+  | { success: true; token: string; user: User }
+  | { success: false; message: string };
 
 const mapBackendUser = (data: BackendUserPayload): User => ({
   id: data.id,
@@ -135,15 +144,14 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
 
 const resolveAuthErrorMessage = (error: unknown): string => {
   console.log("[AuthContext] resolveAuthErrorMessage", error);
-  
+  const apiUrl = getEnvApiBaseUrl() || "configured backend";
+
   if (error instanceof TRPCClientError) {
     const dataMessage = typeof error.data?.message === "string" ? error.data.message : null;
     if (typeof error.message === "string" && error.message.toLowerCase().includes("unexpected token")) {
-      const apiUrl = getApiBaseUrl();
-      return `Cannot connect to backend at ${apiUrl}. Make sure the backend server is running on port 8787.`;
+      return `Cannot connect to backend at ${apiUrl}. Make sure the backend server is running.`;
     }
     if (typeof error.message === "string" && error.message.toLowerCase().includes("fetch")) {
-      const apiUrl = getApiBaseUrl();
       return `Network error: Cannot reach backend at ${apiUrl}. Please check if the server is running.`;
     }
     if (dataMessage && dataMessage.length > 0) {
@@ -155,7 +163,6 @@ const resolveAuthErrorMessage = (error: unknown): string => {
   }
   if (error instanceof Error) {
     if (error.message.includes("Failed to fetch") || error.message.includes("Network request failed")) {
-      const apiUrl = getApiBaseUrl();
       return `Cannot connect to backend at ${apiUrl}. Ensure the server is running and accessible.`;
     }
     if (typeof error.message === "string" && error.message.length > 0) {
@@ -166,8 +173,12 @@ const resolveAuthErrorMessage = (error: unknown): string => {
 };
 
 const performAuthMutation = async (path: string, payload: Record<string, unknown>): Promise<AuthApiResponse> => {
-  const baseUrl = getApiBaseUrl();
-  const url = `${baseUrl}${path}`;
+  const baseUrl = getEnvApiBaseUrl();
+  if (!baseUrl) {
+    return { success: false, error: "Backend URL not configured. Set EXPO_PUBLIC_API_URL." };
+  }
+
+  const url = `${baseUrl}${ensureLeadingSlash(path)}`;
   console.log(`[AuthContext] POST ${url}`);
 
   try {
@@ -189,7 +200,7 @@ const performAuthMutation = async (path: string, payload: Record<string, unknown
 
     const data = (await response.json()) as AuthApiResponse;
 
-    if (!response.ok && !data.error) {
+    if (!response.ok && !data.error && !data.message) {
       console.warn("AuthContext performAuthMutation non-OK without error", response.status);
       return { success: false, error: `Request failed with status ${response.status}` };
     }
@@ -203,8 +214,13 @@ const performAuthMutation = async (path: string, payload: Record<string, unknown
 };
 
 const fetchCurrentUser = async (token: string): Promise<BackendUserPayload | null> => {
+  const baseUrl = getEnvApiBaseUrl();
+  if (!baseUrl) {
+    throw new Error("Backend URL not configured. Set EXPO_PUBLIC_API_URL.");
+  }
+
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/auth/me`, {
+    const response = await fetch(`${baseUrl}/api/auth/me`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -244,8 +260,13 @@ const revokeSessionRemote = async (token: string | null) => {
     return;
   }
 
+  const baseUrl = getEnvApiBaseUrl();
+  if (!baseUrl) {
+    return;
+  }
+
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
+    const response = await fetch(`${baseUrl}/api/auth/logout`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -348,23 +369,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   }, [bootstrapAuth]);
 
   const login = useCallback(
-    async (
-      email: string,
-      password: string
-    ): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
+    async (email: string, password: string): Promise<AuthHandlerResult> => {
       try {
         const response = await performAuthMutation("/api/auth/login", { email, password });
 
         if (!response.success) {
-          const resolvedError = response.error ?? "Invalid login credentials.";
-          setAuthError(resolvedError);
-          return { success: false, error: resolvedError };
+          const resolvedMessage = response.error ?? response.message ?? "Invalid login credentials.";
+          setAuthError(resolvedMessage);
+          return { success: false, message: resolvedMessage };
         }
 
         if (!response.token || !response.user) {
-          const missingDataError = "Missing token or user data in response.";
-          setAuthError(missingDataError);
-          return { success: false, error: missingDataError };
+          const missingDataMessage = "Missing token or user data in response.";
+          setAuthError(missingDataMessage);
+          return { success: false, message: missingDataMessage };
         }
 
         await persistSession(response.token);
@@ -378,26 +396,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         return {
           success: true,
+          token: response.token,
           user: mapped,
-          destination: resolveRoleDestination(mapped.role),
         };
       } catch (error) {
         const message = resolveAuthErrorMessage(error);
         console.error("AuthContext login error", message, error);
         setAuthError(message);
         await clearSession();
-        return { success: false, error: message };
+        return { success: false, message };
       }
     },
     [clearSession, persistSession]
   );
 
   const register = useCallback(
-    async (
-      email: string,
-      password: string,
-      username: string
-    ): Promise<{ success: boolean; error?: string; user?: User; destination?: string }> => {
+    async (email: string, password: string, username: string): Promise<AuthHandlerResult> => {
       try {
         const response = await performAuthMutation("/api/auth/register", {
           email,
@@ -407,15 +421,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         });
 
         if (!response.success) {
-          const resolvedError = response.error ?? "Registration failed.";
-          setAuthError(resolvedError);
-          return { success: false, error: resolvedError };
+          const resolvedMessage = response.error ?? response.message ?? "Registration failed.";
+          setAuthError(resolvedMessage);
+          return { success: false, message: resolvedMessage };
         }
 
         if (!response.token || !response.user) {
-          const missingDataError = "Missing token or user data in response.";
-          setAuthError(missingDataError);
-          return { success: false, error: missingDataError };
+          const missingDataMessage = "Missing token or user data in response.";
+          setAuthError(missingDataMessage);
+          return { success: false, message: missingDataMessage };
         }
 
         await persistSession(response.token);
@@ -429,15 +443,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         return {
           success: true,
+          token: response.token,
           user: mapped,
-          destination: resolveRoleDestination(mapped.role),
         };
       } catch (error) {
         const message = resolveAuthErrorMessage(error);
         console.error("AuthContext register error", message, error);
         setAuthError(message);
         await clearSession();
-        return { success: false, error: message };
+        return { success: false, message };
       }
     },
     [clearSession, persistSession]
@@ -516,7 +530,18 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const isAdmin = useCallback(() => authUser?.role === "admin" || authUser?.role === "superadmin", [authUser]);
   const isCreator = useCallback(() => authUser?.role === "creator", [authUser]);
 
-  const roleDestination = useMemo(() => resolveRoleDestination(authUser?.role), [authUser?.role]);
+  const roleDestination = useMemo(() => {
+    switch (authUser?.role) {
+      case "superadmin":
+        return "/super-admin";
+      case "admin":
+        return "/admin-dashboard";
+      case "creator":
+        return "/creator-studio";
+      default:
+        return "/(tabs)/home";
+    }
+  }, [authUser?.role]);
 
   const value = useMemo(
     () => ({
