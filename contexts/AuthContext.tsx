@@ -177,6 +177,12 @@ const fetchCurrentUser = async (token: string): Promise<BackendUserPayload | nul
       throw new Error(text || "Failed to validate session");
     }
 
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      console.error("AuthContext fetchCurrentUser received non-JSON response", contentType);
+      throw new Error("Server returned invalid response. Expected JSON.");
+    }
+
     const data = (await response.json()) as AuthMeResponse;
     if (!data.success || !data.user) {
       return null;
@@ -257,7 +263,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(backendUser));
         return { success: true, user: mapped } as const;
       } catch (error) {
-        setAuthError("Unable to verify authentication. Please try again.");
+        console.error("AuthContext refreshAuthUser error", error);
+        await clearSession();
         return { success: false, error: "Unable to fetch profile" } as const;
       }
     },
@@ -304,32 +311,40 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       try {
         const response = await trpcClient.auth.login.mutate({ email, password });
 
-        if (!response.success || !response.token || !response.user) {
+        if (!response || typeof response !== "object") {
+          return { success: false, error: "Invalid response from server." };
+        }
+
+        if (!response.success) {
           return { success: false, error: response.error ?? "Invalid login credentials." };
         }
 
-        await persistSession(response.token);
-        const refreshed = await refreshAuthUser(response.token);
-
-        if (!refreshed.success || !refreshed.user) {
-          await clearSession();
-          return { success: false, error: "Unable to initialize session." };
+        if (!response.token || !response.user) {
+          return { success: false, error: "Missing token or user data in response." };
         }
 
-        console.log("AuthContext login success", refreshed.user.id, refreshed.user.role);
+        await persistSession(response.token);
+        const mapped = mapBackendUser(response.user as BackendUserPayload);
+        setAuthUser(mapped);
+        setIsAuthenticated(true);
+        setAuthError(null);
+        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
+
+        console.log("AuthContext login success", mapped.id, mapped.role);
 
         return {
           success: true,
-          user: refreshed.user,
-          destination: resolveRoleDestination(refreshed.user.role),
+          user: mapped,
+          destination: resolveRoleDestination(mapped.role),
         };
       } catch (error) {
         const message = resolveAuthErrorMessage(error);
         console.error("AuthContext login error", message, error);
+        await clearSession();
         return { success: false, error: message };
       }
     },
-    [clearSession, persistSession, refreshAuthUser]
+    [clearSession, persistSession]
   );
 
   const register = useCallback(
@@ -346,32 +361,40 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           displayName: username,
         });
 
-        if (!response.success || !response.token || !response.user) {
+        if (!response || typeof response !== "object") {
+          return { success: false, error: "Invalid response from server." };
+        }
+
+        if (!response.success) {
           return { success: false, error: response.error ?? "Registration failed." };
         }
 
-        await persistSession(response.token);
-        const refreshed = await refreshAuthUser(response.token);
-
-        if (!refreshed.success || !refreshed.user) {
-          await clearSession();
-          return { success: false, error: "Unable to initialize session." };
+        if (!response.token || !response.user) {
+          return { success: false, error: "Missing token or user data in response." };
         }
 
-        console.log("AuthContext register success", refreshed.user.id, refreshed.user.role);
+        await persistSession(response.token);
+        const mapped = mapBackendUser(response.user as BackendUserPayload);
+        setAuthUser(mapped);
+        setIsAuthenticated(true);
+        setAuthError(null);
+        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
+
+        console.log("AuthContext register success", mapped.id, mapped.role);
 
         return {
           success: true,
-          user: refreshed.user,
-          destination: resolveRoleDestination(refreshed.user.role),
+          user: mapped,
+          destination: resolveRoleDestination(mapped.role),
         };
       } catch (error) {
         const message = resolveAuthErrorMessage(error);
         console.error("AuthContext register error", message, error);
+        await clearSession();
         return { success: false, error: message };
       }
     },
-    [clearSession, persistSession, refreshAuthUser]
+    [clearSession, persistSession]
   );
 
   const logout = useCallback(async () => {
