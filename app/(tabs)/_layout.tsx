@@ -5,10 +5,12 @@ import { View, Image, StyleSheet, ActivityIndicator } from "react-native";
 import { theme } from "../../constants/theme";
 import MiniPlayer from "../../components/MiniPlayer";
 import { useAuth } from "../../contexts/AuthContext";
+import { useRequireAuth } from "../../hooks/useRequireAuth";
 
 export default function TabLayout() {
   const { authUser, isAuthenticated, isAuthLoading } = useAuth();
   const router = useRouter();
+  const requireAuth = useRequireAuth();
 
   if (isAuthLoading) {
     return (
@@ -17,15 +19,6 @@ export default function TabLayout() {
       </View>
     );
   }
-
-  const handleProtectedNavigation = (path: string) => {
-    if (!isAuthenticated) {
-      router.push({ pathname: "/login", params: { redirect: path } });
-      return;
-    }
-
-    router.push(path);
-  };
 
   return (
     <View style={styles.container}>
@@ -46,7 +39,7 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen
-          name="index"
+          name="home"
           options={{
             title: "Home",
             tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
@@ -68,7 +61,13 @@ export default function TabLayout() {
           listeners={{
             tabPress: (event) => {
               event.preventDefault();
-              router.push("/shorts-feed");
+              requireAuth({
+                redirectPath: "/shorts-feed",
+                reason: "Sign in to watch and share Shorts.",
+                onAuthenticated: () => {
+                  router.push("/shorts-feed");
+                },
+              });
             },
           }}
         />
@@ -80,10 +79,14 @@ export default function TabLayout() {
           }}
           listeners={{
             tabPress: (event) => {
-              if (!isAuthenticated) {
-                event.preventDefault();
-                handleProtectedNavigation("/(tabs)/subscriptions");
-              }
+              event.preventDefault();
+              requireAuth({
+                redirectPath: "/(tabs)/subscriptions",
+                reason: "Sign in to view channels you follow.",
+                onAuthenticated: () => {
+                  router.push("/(tabs)/subscriptions");
+                },
+              });
             },
           }}
         />
@@ -114,10 +117,14 @@ export default function TabLayout() {
           }}
           listeners={{
             tabPress: (event) => {
-              if (!isAuthenticated) {
-                event.preventDefault();
-                handleProtectedNavigation("/profile");
-              }
+              event.preventDefault();
+              requireAuth({
+                redirectPath: "/profile",
+                reason: "Sign in to manage your profile.",
+                onAuthenticated: () => {
+                  router.push("/profile");
+                },
+              });
             },
           }}
         />

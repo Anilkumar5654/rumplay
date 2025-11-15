@@ -18,7 +18,7 @@ const resolveRoleDestination = (role: UserRole | null | undefined): string => {
     case "creator":
       return "/creator-studio";
     default:
-      return "/(tabs)";
+      return "/(tabs)/home";
   }
 };
 

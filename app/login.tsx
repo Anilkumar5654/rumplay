@@ -40,7 +40,7 @@ export default function LoginScreen() {
 
     if (result.success) {
       const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
-      const destination = redirectPath ?? result.destination ?? '/(tabs)';
+      const destination = redirectPath ?? result.destination ?? '/(tabs)/home';
       Alert.alert('Success', 'Logged in successfully!', [
         { text: 'OK', onPress: () => router.replace(destination) }
       ]);

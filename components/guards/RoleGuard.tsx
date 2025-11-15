@@ -23,7 +23,7 @@ type RoleGuardProps = {
   testID?: string;
 };
 
-const RoleGuard = ({ allowedRoles, enforceAuth = true, fallbackPath = "/(tabs)", children, testID }: RoleGuardProps) => {
+const RoleGuard = ({ allowedRoles, enforceAuth = true, fallbackPath = "/(tabs)/home", children, testID }: RoleGuardProps) => {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthLoading, isAuthenticated, authUser } = useAuth();

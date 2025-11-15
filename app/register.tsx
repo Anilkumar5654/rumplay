@@ -48,7 +48,7 @@ export default function RegisterScreen() {
 
     if (result.success) {
       const redirectPath = typeof params.redirect === 'string' && params.redirect.length > 0 ? params.redirect : undefined;
-      const destination = redirectPath ?? result.destination ?? '/(tabs)';
+      const destination = redirectPath ?? result.destination ?? '/(tabs)/home';
       Alert.alert('Success', 'Account created successfully!', [
         { text: 'OK', onPress: () => router.replace(destination) }
       ]);
