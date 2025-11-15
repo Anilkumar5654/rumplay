@@ -41,17 +41,63 @@ const sanitizeUrl = (value: string) => {
   return withoutTrailingSlash;
 };
 
+const BUNDLER_PORTS = new Set([
+  "19000",
+  "19001",
+  "19002",
+  "19006",
+  "19007",
+  "8081",
+  "8080",
+  "5173",
+]);
+
+const normalizePort = (port: string | null | undefined): string | null => {
+  if (!port) {
+    return null;
+  }
+
+  const digits = port.replace(/[^0-9]/g, "");
+  if (digits.length === 0) {
+    return null;
+  }
+
+  if (BUNDLER_PORTS.has(digits)) {
+    return null;
+  }
+
+  return digits;
+};
+
 const guessFromWindow = (): string | null => {
   if (typeof window === "undefined") {
     return null;
   }
 
   const origin = window.location?.origin;
-  if (typeof origin === "string" && origin.length > 0 && origin !== "null") {
-    return sanitizeUrl(origin);
+  if (typeof origin !== "string" || origin.length === 0 || origin === "null") {
+    return null;
   }
 
-  return null;
+  try {
+    const parsed = new URL(origin);
+    const explicitPort = normalizePort(resolveEnv("EXPO_PUBLIC_API_PORT"));
+    const fallbackPort = explicitPort ?? "8787";
+    const parsedPort = normalizePort(parsed.port) ?? fallbackPort;
+
+    if (parsed.port && BUNDLER_PORTS.has(parsed.port)) {
+      return sanitizeUrl(`${parsed.protocol}//${parsed.hostname}:${parsedPort}`);
+    }
+
+    if (!parsed.port && parsed.hostname === "localhost") {
+      return sanitizeUrl(`${parsed.protocol}//${parsed.hostname}:${parsedPort}`);
+    }
+
+    return sanitizeUrl(origin);
+  } catch (error) {
+    console.error("guessFromWindow failed to parse origin", origin, error);
+    return null;
+  }
 };
 
 const guessFromExpoHost = (): string | null => {
@@ -73,15 +119,12 @@ const guessFromExpoHost = (): string | null => {
     normalizedHost.startsWith("192.168.") ||
     normalizedHost.endsWith(".local");
 
-  const explicitPort = resolveEnv("EXPO_PUBLIC_API_PORT");
-  const inferredPort = explicitPort ?? portPart ?? "8787";
+  const explicitPort = normalizePort(resolveEnv("EXPO_PUBLIC_API_PORT"));
+  const fallbackPort = explicitPort ?? "8787";
+  const normalizedPort = normalizePort(portPart) ?? fallbackPort;
 
   const protocol = isLocalHost ? "http" : "https";
-  const portSegment = inferredPort.length > 0 ? `:${inferredPort.replace(/[^0-9]/g, "")}` : "";
-
-  if (portSegment.length === 1) {
-    return null;
-  }
+  const portSegment = normalizedPort.length > 0 ? `:${normalizedPort}` : "";
 
   return sanitizeUrl(`${protocol}://${normalizedHost}${portSegment}`);
 };
@@ -99,17 +142,17 @@ export const getApiBaseUrl = () => {
     return cachedBaseUrl;
   }
 
-  const windowUrl = Platform.OS === "web" ? guessFromWindow() : null;
-  if (windowUrl) {
-    console.warn("Using window origin as API base URL. Configure EXPO_PUBLIC_API_URL for production.");
-    cachedBaseUrl = windowUrl;
-    return cachedBaseUrl;
-  }
-
   const expoHostUrl = guessFromExpoHost();
   if (expoHostUrl) {
     console.warn("Using Expo host derived API URL. Configure EXPO_PUBLIC_API_URL to avoid this fallback.");
     cachedBaseUrl = expoHostUrl;
+    return cachedBaseUrl;
+  }
+
+  const windowUrl = Platform.OS === "web" ? guessFromWindow() : null;
+  if (windowUrl) {
+    console.warn("Using window origin as API base URL. Configure EXPO_PUBLIC_API_URL for production.");
+    cachedBaseUrl = windowUrl;
     return cachedBaseUrl;
   }
 
@@ -125,10 +168,10 @@ export const setTrpcAuthToken = (token: string | null) => {
 export const getTrpcAuthToken = () => authToken;
 
 export const trpcClient = trpc.createClient({
+  transformer: superjson,
   links: [
     httpBatchLink({
       url: `${getApiBaseUrl()}/api/trpc`,
-      transformer: superjson,
       headers() {
         if (!authToken) {
           return {};
