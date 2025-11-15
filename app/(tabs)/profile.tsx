@@ -16,6 +16,7 @@ export default function ProfileScreen() {
   const { currentUser, channels, videos } = useAppState();
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [showMyVideos, setShowMyVideos] = useState(false);
 
   const userChannel = currentUser.channelId 
     ? channels.find((ch) => ch.id === currentUser.channelId)
@@ -29,7 +30,7 @@ export default function ProfileScreen() {
   const myRegularVideos = myVideos.filter((v) => !v.isShort);
 
   const menuItems = [
-    { icon: VideoIcon, label: "My Videos", count: myVideos.length, route: null, onPress: () => {} },
+    { icon: VideoIcon, label: "My Videos", count: myVideos.length, route: null, onPress: () => setShowMyVideos(!showMyVideos) },
     { icon: History, label: "History", count: currentUser.watchHistory.length, route: null },
     { icon: ThumbsUp, label: "Liked Videos", count: currentUser.likedVideos.length, route: null },
     { icon: Bookmark, label: "Saved Videos", count: currentUser.savedVideos.length, route: null },
@@ -143,7 +144,13 @@ export default function ProfileScreen() {
               <View key={item.label}>
                 <TouchableOpacity 
                   style={styles.menuItem}
-                  onPress={() => item.route && router.push(item.route)}
+                  onPress={() => {
+                    if (item.onPress) {
+                      item.onPress();
+                    } else if (item.route) {
+                      router.push(item.route);
+                    }
+                  }}
                 >
                   <View style={styles.menuItemLeft}>
                     <Icon color={theme.colors.text} size={24} />
@@ -154,7 +161,7 @@ export default function ProfileScreen() {
                   )}
                 </TouchableOpacity>
                 
-                {item.label === "My Videos" && myVideos.length > 0 && (
+                {item.label === "My Videos" && showMyVideos && myVideos.length > 0 && (
                   <View style={styles.myVideosSection}>
                     {myRegularVideos.length > 0 && (
                       <View style={styles.videoTypeSection}>

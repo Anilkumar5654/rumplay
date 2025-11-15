@@ -1,5 +1,5 @@
-import React from "react";
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions } from "react-native";
+import React, { useState } from "react";
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { theme } from "@/constants/theme";
@@ -11,6 +11,7 @@ export default function SubscriptionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { videos, currentUser, channels } = useAppState();
+  const [refreshing, setRefreshing] = useState(false);
 
   const subscribedChannelIds = currentUser.subscriptions.map((s) => s.channelId);
   const subscribedVideos = videos.filter((v) => 
@@ -25,8 +26,14 @@ export default function SubscriptionsScreen() {
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setRefreshing(false);
   };
 
   const formatTimeAgo = (dateString: string): string => {
@@ -45,7 +52,18 @@ export default function SubscriptionsScreen() {
         <Text style={styles.headerTitle}>Subscriptions</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+      >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}

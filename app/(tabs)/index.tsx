@@ -55,7 +55,7 @@ export default function HomeScreen() {
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -74,7 +74,7 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1500));
     setRefreshing(false);
   };
 
@@ -83,7 +83,12 @@ export default function HomeScreen() {
       style={styles.shortCard}
       onPress={() => router.push(`/shorts/${item.id}`)}
     >
-      <Image source={{ uri: item.thumbnail }} style={styles.shortThumbnail} />
+      <View style={styles.shortThumbnailContainer}>
+        <Image source={{ uri: item.thumbnail }} style={styles.shortThumbnail} />
+        <View style={styles.shortBadge}>
+          <Text style={styles.shortBadgeText}>SHORT</Text>
+        </View>
+      </View>
       <Text style={styles.shortTitle} numberOfLines={2}>
         {item.title}
       </Text>
@@ -151,7 +156,12 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[0]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
         }
       >
         <View style={styles.categoriesContainer}>
@@ -305,11 +315,29 @@ const styles = StyleSheet.create({
   shortCard: {
     width: 140,
   },
+  shortThumbnailContainer: {
+    position: "relative" as const,
+  },
   shortThumbnail: {
     width: 140,
     height: 240,
     borderRadius: theme.radii.lg,
     backgroundColor: theme.colors.surface,
+  },
+  shortBadge: {
+    position: "absolute" as const,
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
+  },
+  shortBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "bold" as const,
+    letterSpacing: 0.5,
   },
   shortTitle: {
     color: theme.colors.text,

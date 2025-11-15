@@ -48,7 +48,6 @@ interface UploadModalProps {
 
 export default function UploadModal({ visible, onClose, onUploadComplete }: UploadModalProps) {
   const { addVideo, currentUser, getChannelById } = useAppState();
-  const [uploadType, setUploadType] = useState<"video" | "short" | null>(null);
 
   const [uploadData, setUploadData] = useState<Partial<VideoUploadData>>({
     title: "",
@@ -72,7 +71,6 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
   const [tagInput, setTagInput] = useState("");
 
   const resetModal = () => {
-    setUploadType(null);
     setUploadData({
       title: "",
       description: "",
@@ -164,7 +162,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
         setProgress({ progress: 10, status: "processing", message: "Processing video..." });
 
         const duration = video.duration || (await getVideoDuration(video.uri)) || 0;
-        const isShort = uploadType === "short" || (duration > 0 && duration < 60);
+        const isShort = duration > 0 && duration < 60;
         const thumbnailUri = await generateThumbnail(video.uri);
 
         setUploadData({
@@ -177,8 +175,8 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
 
         setProgress({ progress: 0, status: "idle", message: "" });
 
-        if (isShort && uploadType === "video") {
-          Alert.alert("Short Video", "This video is under 60 seconds and will be uploaded as a Short.");
+        if (isShort) {
+          Alert.alert("Short Detected", "This video is under 60 seconds and will be uploaded as a Short.");
         }
       }
     } catch (error) {
@@ -204,7 +202,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
         setProgress({ progress: 10, status: "processing", message: "Processing video..." });
 
         const duration = video.duration || (await getVideoDuration(video.uri)) || 0;
-        const isShort = uploadType === "short" || (duration > 0 && duration < 60);
+        const isShort = duration > 0 && duration < 60;
         const thumbnailUri = await generateThumbnail(video.uri);
 
         setUploadData({
@@ -216,6 +214,10 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
         });
 
         setProgress({ progress: 0, status: "idle", message: "" });
+
+        if (isShort) {
+          Alert.alert("Short Detected", "This video is under 60 seconds and will be uploaded as a Short.");
+        }
       }
     } catch (error) {
       console.error("Error recording video:", error);
@@ -365,219 +367,195 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={handleClose}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {uploadType === null ? "Upload" : uploadType === "video" ? "Upload Video" : "Upload Short"}
-          </Text>
+          <Text style={styles.headerTitle}>Upload Video</Text>
           <TouchableOpacity onPress={handleClose} disabled={isUploading}>
             <X color={theme.colors.text} size={24} />
           </TouchableOpacity>
         </View>
 
-        {uploadType === null ? (
-          <View style={styles.typeSelection}>
-            <TouchableOpacity
-              style={styles.typeCard}
-              onPress={() => setUploadType("video")}
-            >
-              <VideoIcon color={theme.colors.primary} size={64} />
-              <Text style={styles.typeTitle}>Video</Text>
-              <Text style={styles.typeDescription}>Upload regular videos</Text>
-            </TouchableOpacity>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {!uploadData.videoUri ? (
+            <View style={styles.uploadOptions}>
+              <TouchableOpacity style={styles.uploadButton} onPress={pickVideo}>
+                <VideoIcon color={theme.colors.primary} size={48} />
+                <Text style={styles.uploadButtonText}>Pick from Gallery</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.typeCard}
-              onPress={() => setUploadType("short")}
-            >
-              <VideoIcon color={theme.colors.primary} size={64} />
-              <Text style={styles.typeTitle}>Short</Text>
-              <Text style={styles.typeDescription}>Upload short-form content</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {!uploadData.videoUri ? (
-              <View style={styles.uploadOptions}>
-                <TouchableOpacity style={styles.uploadButton} onPress={pickVideo}>
-                  <VideoIcon color={theme.colors.primary} size={48} />
-                  <Text style={styles.uploadButtonText}>Pick from Gallery</Text>
+              <TouchableOpacity style={styles.uploadButton} onPress={recordVideo}>
+                <Camera color={theme.colors.primary} size={48} />
+                <Text style={styles.uploadButtonText}>Record Video</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.videoPreview}>
+                <Image source={{ uri: uploadData.thumbnailUri }} style={styles.thumbnail} />
+                <TouchableOpacity style={styles.changeThumbnailButton} onPress={pickThumbnail}>
+                  <ImageIcon color="#FFFFFF" size={16} />
+                  <Text style={styles.changeThumbnailText}>Change Thumbnail</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity style={styles.uploadButton} onPress={recordVideo}>
-                  <Camera color={theme.colors.primary} size={48} />
-                  <Text style={styles.uploadButtonText}>Record Video</Text>
-                </TouchableOpacity>
+                {uploadData.isShort && (
+                  <View style={styles.shortBadge}>
+                    <Text style={styles.shortBadgeText}>SHORT</Text>
+                  </View>
+                )}
               </View>
-            ) : (
-              <>
-                <View style={styles.videoPreview}>
-                  <Image source={{ uri: uploadData.thumbnailUri }} style={styles.thumbnail} />
-                  <TouchableOpacity style={styles.changeThumbnailButton} onPress={pickThumbnail}>
-                    <ImageIcon color="#FFFFFF" size={16} />
-                    <Text style={styles.changeThumbnailText}>Change Thumbnail</Text>
-                  </TouchableOpacity>
-                  {uploadData.isShort && (
-                    <View style={styles.shortBadge}>
-                      <Text style={styles.shortBadgeText}>SHORT</Text>
-                    </View>
-                  )}
-                </View>
 
-                <View style={styles.formSection}>
-                  <Text style={styles.label}>
-                    Title <Text style={styles.required}>*</Text>
-                  </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter video title"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={uploadData.title}
-                    onChangeText={(text) => setUploadData({ ...uploadData, title: text })}
-                    editable={!isUploading}
-                    maxLength={100}
-                  />
-                </View>
+              <View style={styles.formSection}>
+                <Text style={styles.label}>
+                  Title <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter video title"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={uploadData.title}
+                  onChangeText={(text) => setUploadData({ ...uploadData, title: text })}
+                  editable={!isUploading}
+                  maxLength={100}
+                />
+              </View>
 
-                <View style={styles.formSection}>
-                  <Text style={styles.label}>Description</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Enter video description"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={uploadData.description}
-                    onChangeText={(text) => setUploadData({ ...uploadData, description: text })}
-                    multiline
-                    numberOfLines={4}
-                    editable={!isUploading}
-                    maxLength={500}
-                  />
-                </View>
+              <View style={styles.formSection}>
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Enter video description"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={uploadData.description}
+                  onChangeText={(text) => setUploadData({ ...uploadData, description: text })}
+                  multiline
+                  numberOfLines={4}
+                  editable={!isUploading}
+                  maxLength={500}
+                />
+              </View>
 
-                <View style={styles.formSection}>
-                  <Text style={styles.label}>
-                    Category <Text style={styles.required}>*</Text>
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {CATEGORIES.map((cat) => (
-                      <TouchableOpacity
-                        key={cat}
-                        style={[
-                          styles.categoryChip,
-                          uploadData.category === cat && styles.categoryChipActive,
-                        ]}
-                        onPress={() => setUploadData({ ...uploadData, category: cat })}
-                        disabled={isUploading}
-                      >
-                        <Text
-                          style={[
-                            styles.categoryChipText,
-                            uploadData.category === cat && styles.categoryChipTextActive,
-                          ]}
-                        >
-                          {cat}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-
-                <View style={styles.formSection}>
-                  <Text style={styles.label}>Tags</Text>
-                  <View style={styles.tagInputContainer}>
-                    <TextInput
-                      style={styles.tagInput}
-                      placeholder="Add tags..."
-                      placeholderTextColor={theme.colors.textSecondary}
-                      value={tagInput}
-                      onChangeText={setTagInput}
-                      onSubmitEditing={addTag}
-                      returnKeyType="done"
-                      editable={!isUploading}
-                    />
-                    <TouchableOpacity style={styles.addTagButton} onPress={addTag} disabled={isUploading}>
-                      <Text style={styles.addTagButtonText}>Add</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.tagsContainer}>
-                    {uploadData.tags?.map((tag) => (
-                      <View key={tag} style={styles.tag}>
-                        <Text style={styles.tagText}>#{tag}</Text>
-                        <TouchableOpacity onPress={() => removeTag(tag)} disabled={isUploading}>
-                          <X color={theme.colors.text} size={16} />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.formSection}>
-                  <Text style={styles.label}>
-                    Visibility <Text style={styles.required}>*</Text>
-                  </Text>
-                  {VISIBILITY_OPTIONS.map((option) => (
+              <View style={styles.formSection}>
+                <Text style={styles.label}>
+                  Category <Text style={styles.required}>*</Text>
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {CATEGORIES.map((cat) => (
                     <TouchableOpacity
-                      key={option.value}
+                      key={cat}
                       style={[
-                        styles.visibilityOption,
-                        uploadData.visibility === option.value && styles.visibilityOptionActive,
+                        styles.categoryChip,
+                        uploadData.category === cat && styles.categoryChipActive,
                       ]}
-                      onPress={() => setUploadData({ ...uploadData, visibility: option.value })}
+                      onPress={() => setUploadData({ ...uploadData, category: cat })}
                       disabled={isUploading}
                     >
-                      <View style={styles.visibilityOptionContent}>
-                        <Text style={styles.visibilityLabel}>{option.label}</Text>
-                        <Text style={styles.visibilityDescription}>{option.description}</Text>
-                      </View>
-                      <View
+                      <Text
                         style={[
-                          styles.radio,
-                          uploadData.visibility === option.value && styles.radioActive,
+                          styles.categoryChipText,
+                          uploadData.category === cat && styles.categoryChipTextActive,
                         ]}
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {uploadData.visibility === "scheduled" && (
-                  <View style={styles.formSection}>
-                    <Text style={styles.label}>
-                      Scheduled Date <Text style={styles.required}>*</Text>
-                    </Text>
-                    <TouchableOpacity style={styles.dateButton}>
-                      <Calendar color={theme.colors.text} size={20} />
-                      <Text style={styles.dateButtonText}>
-                        {uploadData.scheduledDate || "Select date and time"}
+                      >
+                        {cat}
                       </Text>
                     </TouchableOpacity>
-                    <Text style={styles.helperText}>
-                      Note: Scheduling functionality coming soon
-                    </Text>
-                  </View>
-                )}
+                  ))}
+                </ScrollView>
+              </View>
 
-                {isUploading && (
-                  <View style={styles.progressSection}>
-                    <View style={styles.progressBar}>
-                      <View style={[styles.progressFill, { width: `${progress.progress}%` }]} />
+              <View style={styles.formSection}>
+                <Text style={styles.label}>Tags</Text>
+                <View style={styles.tagInputContainer}>
+                  <TextInput
+                    style={styles.tagInput}
+                    placeholder="Add tags..."
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={tagInput}
+                    onChangeText={setTagInput}
+                    onSubmitEditing={addTag}
+                    returnKeyType="done"
+                    editable={!isUploading}
+                  />
+                  <TouchableOpacity style={styles.addTagButton} onPress={addTag} disabled={isUploading}>
+                    <Text style={styles.addTagButtonText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.tagsContainer}>
+                  {uploadData.tags?.map((tag) => (
+                    <View key={tag} style={styles.tag}>
+                      <Text style={styles.tagText}>#{tag}</Text>
+                      <TouchableOpacity onPress={() => removeTag(tag)} disabled={isUploading}>
+                        <X color={theme.colors.text} size={16} />
+                      </TouchableOpacity>
                     </View>
-                    <Text style={styles.progressText}>{progress.message}</Text>
-                  </View>
-                )}
+                  ))}
+                </View>
+              </View>
 
-                <TouchableOpacity
-                  style={[styles.uploadSubmitButton, isUploading && styles.uploadSubmitButtonDisabled]}
-                  onPress={handleUpload}
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.uploadSubmitButtonText}>Upload {uploadType === "short" ? "Short" : "Video"}</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-          </ScrollView>
-        )}
+              <View style={styles.formSection}>
+                <Text style={styles.label}>
+                  Visibility <Text style={styles.required}>*</Text>
+                </Text>
+                {VISIBILITY_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.visibilityOption,
+                      uploadData.visibility === option.value && styles.visibilityOptionActive,
+                    ]}
+                    onPress={() => setUploadData({ ...uploadData, visibility: option.value })}
+                    disabled={isUploading}
+                  >
+                    <View style={styles.visibilityOptionContent}>
+                      <Text style={styles.visibilityLabel}>{option.label}</Text>
+                      <Text style={styles.visibilityDescription}>{option.description}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.radio,
+                        uploadData.visibility === option.value && styles.radioActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {uploadData.visibility === "scheduled" && (
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>
+                    Scheduled Date <Text style={styles.required}>*</Text>
+                  </Text>
+                  <TouchableOpacity style={styles.dateButton}>
+                    <Calendar color={theme.colors.text} size={20} />
+                    <Text style={styles.dateButtonText}>
+                      {uploadData.scheduledDate || "Select date and time"}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.helperText}>
+                    Note: Scheduling functionality coming soon
+                  </Text>
+                </View>
+              )}
+
+              {isUploading && (
+                <View style={styles.progressSection}>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${progress.progress}%` }]} />
+                  </View>
+                  <Text style={styles.progressText}>{progress.message}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.uploadSubmitButton, isUploading && styles.uploadSubmitButtonDisabled]}
+                onPress={handleUpload}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.uploadSubmitButtonText}>Upload Video</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -602,34 +580,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.xxl,
     fontWeight: "bold" as const,
     color: theme.colors.text,
-  },
-  typeSelection: {
-    flex: 1,
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
-    gap: theme.spacing.xl,
-    padding: theme.spacing.xl,
-  },
-  typeCard: {
-    width: "100%",
-    maxWidth: 300,
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.xxl,
-    borderRadius: theme.radii.xl,
-    alignItems: "center" as const,
-    gap: theme.spacing.md,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
-  },
-  typeTitle: {
-    fontSize: theme.fontSizes.xl,
-    fontWeight: "bold" as const,
-    color: theme.colors.text,
-  },
-  typeDescription: {
-    fontSize: theme.fontSizes.sm,
-    color: theme.colors.textSecondary,
-    textAlign: "center" as const,
   },
   content: {
     flex: 1,

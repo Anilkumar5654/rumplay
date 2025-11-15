@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Text,
   FlatList,
+  Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Video as ExpoVideo, ResizeMode } from "expo-av";
@@ -88,7 +89,14 @@ export default function ShortsPlayerScreen() {
           </View>
 
           <View style={styles.bottomInfo}>
-            <TouchableOpacity onPress={() => router.push(`/channel/${item.channelId}`)}>
+            <TouchableOpacity 
+              style={styles.channelRow}
+              onPress={() => router.push(`/channel/${item.channelId}`)}
+            >
+              <Image 
+                source={{ uri: item.channelAvatar }} 
+                style={styles.channelAvatar} 
+              />
               <Text style={styles.channelName}>@{item.channelName}</Text>
             </TouchableOpacity>
             <Text style={styles.title} numberOfLines={2}>
@@ -166,11 +174,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
   },
+  channelRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  channelAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
   channelName: {
     color: "#FFFFFF",
     fontSize: theme.fontSizes.md,
     fontWeight: "600" as const,
-    marginBottom: theme.spacing.xs,
   },
   title: {
     color: "#FFFFFF",

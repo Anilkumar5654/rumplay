@@ -8,6 +8,7 @@ import {
   Image,
   TextInput,
   Dimensions,
+  RefreshControl,
 } from "react-native";
 import { Search, TrendingUp, Film, Music, Trophy, Book } from "lucide-react-native";
 import { useRouter } from "expo-router";
@@ -31,6 +32,7 @@ export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const { videos } = useAppState();
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const trendingVideos = [...videos]
     .filter((v) => !v.isShort)
@@ -45,8 +47,14 @@ export default function ExploreScreen() {
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setRefreshing(false);
   };
 
   const renderVideoItem = (item: Video) => (
@@ -91,7 +99,18 @@ export default function ExploreScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+      >
         <View style={styles.categoriesGrid}>
           {exploreCategories.map((cat) => {
             const Icon = cat.icon;
