@@ -20,7 +20,26 @@ const resolveEnv = (key: string): string | null => {
   return null;
 };
 
-const sanitizeUrl = (value: string) => value.replace(/\/$/, "");
+const sanitizeUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return trimmed;
+  }
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
+  const lowered = withoutTrailingSlash.toLowerCase();
+  const suffixes: string[] = ["/api/trpc", "/trpc", "/api"];
+
+  for (const suffix of suffixes) {
+    if (lowered.endsWith(suffix)) {
+      const normalized = withoutTrailingSlash.slice(0, withoutTrailingSlash.length - suffix.length);
+      console.warn(`getApiBaseUrl received value ending with "${suffix}". Normalized to API root: ${normalized}`);
+      return normalized;
+    }
+  }
+
+  return withoutTrailingSlash;
+};
 
 const guessFromWindow = (): string | null => {
   if (typeof window === "undefined") {
