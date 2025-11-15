@@ -2,7 +2,6 @@ import { TRPCClientError } from "@trpc/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import * as SecureStore from "expo-secure-store";
-import Constants from "expo-constants";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Platform } from "react-native";
 import type { User, UserRole } from "../types";
@@ -11,48 +10,18 @@ import { trpcClient, setTrpcAuthToken } from "../lib/trpc";
 const AUTH_USER_KEY = "rork_auth_user";
 const AUTH_TOKEN_KEY = "rork_auth_token";
 
-let hasLoggedMissingApiBase = false;
+const rawApi = process.env.EXPO_PUBLIC_API_URL;
+if (typeof rawApi !== "string" || rawApi.trim().length === 0) {
+  throw new Error("Backend URL not configured");
+}
+const API = rawApi.trim().replace(/\/+$/, "");
 
-const ensureLeadingSlash = (path: string) => (path.startsWith("/") ? path : `/${path}`);
-
-type GlobalEnv = typeof globalThis & {
-  EXPO_PUBLIC_API_URL?: string;
-  __env?: Record<string, string>;
-  __rorkEnv?: Record<string, string>;
-  __APP_ENV__?: Record<string, string>;
-};
-
-const resolveApiBaseFromGlobals = (): string | undefined => {
-  if (typeof globalThis === "undefined") {
-    return undefined;
-  }
-  const globalEnv = globalThis as GlobalEnv;
-  return (
-    globalEnv.EXPO_PUBLIC_API_URL ??
-    globalEnv.__rorkEnv?.EXPO_PUBLIC_API_URL ??
-    globalEnv.__env?.EXPO_PUBLIC_API_URL ??
-    globalEnv.__APP_ENV__?.EXPO_PUBLIC_API_URL
-  );
-};
-
-const getEnvApiBaseUrl = (): string => {
-  const envValue =
-    (typeof process !== "undefined" ? process.env?.EXPO_PUBLIC_API_URL : undefined) ??
-    resolveApiBaseFromGlobals() ??
-    Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL ??
-    Constants.expoConfig?.extra?.apiUrl ??
-    Constants.expoConfig?.extra?.apiBaseUrl;
-
-  const api = envValue?.trim();
-  if (!api) {
-    if (!hasLoggedMissingApiBase) {
-      console.error("AuthContext missing EXPO_PUBLIC_API_URL environment variable. Set it in app config.");
-      hasLoggedMissingApiBase = true;
-    }
-    return "";
-  }
-  return api.replace(/\/+$/, "");
-};
+const AUTH_ENDPOINTS = {
+  login: `${API}/api/auth/login`,
+  register: `${API}/api/auth/register`,
+  me: `${API}/api/auth/me`,
+  logout: `${API}/api/auth/logout`,
+} as const;
 
 const secureStoreAvailable = Platform.OS !== "web" && typeof SecureStore.getItemAsync === "function";
 
@@ -172,7 +141,7 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
 
 const resolveAuthErrorMessage = (error: unknown): string => {
   console.log("[AuthContext] resolveAuthErrorMessage", error);
-  const apiUrl = getEnvApiBaseUrl() || "configured backend";
+  const apiUrl = API;
 
   if (error instanceof TRPCClientError) {
     const dataMessage = typeof error.data?.message === "string" ? error.data.message : null;
@@ -200,13 +169,7 @@ const resolveAuthErrorMessage = (error: unknown): string => {
   return "Unable to process the request. Please try again.";
 };
 
-const performAuthMutation = async (path: string, payload: Record<string, unknown>): Promise<AuthApiResponse> => {
-  const baseUrl = getEnvApiBaseUrl();
-  if (!baseUrl) {
-    return { success: false, error: "Backend URL not configured. Set EXPO_PUBLIC_API_URL." };
-  }
-
-  const url = `${baseUrl}${ensureLeadingSlash(path)}`;
+const performAuthMutation = async (url: string, payload: Record<string, unknown>): Promise<AuthApiResponse> => {
   console.log(`[AuthContext] POST ${url}`);
 
   try {
@@ -242,13 +205,8 @@ const performAuthMutation = async (path: string, payload: Record<string, unknown
 };
 
 const fetchCurrentUser = async (token: string): Promise<BackendUserPayload | null> => {
-  const baseUrl = getEnvApiBaseUrl();
-  if (!baseUrl) {
-    throw new Error("Backend URL not configured. Set EXPO_PUBLIC_API_URL.");
-  }
-
   try {
-    const response = await fetch(`${baseUrl}/api/auth/me`, {
+    const response = await fetch(AUTH_ENDPOINTS.me, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -288,13 +246,8 @@ const revokeSessionRemote = async (token: string | null) => {
     return;
   }
 
-  const baseUrl = getEnvApiBaseUrl();
-  if (!baseUrl) {
-    return;
-  }
-
   try {
-    const response = await fetch(`${baseUrl}/api/auth/logout`, {
+    const response = await fetch(AUTH_ENDPOINTS.logout, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -399,7 +352,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const login = useCallback(
     async (email: string, password: string): Promise<AuthHandlerResult> => {
       try {
-        const response = await performAuthMutation("/api/auth/login", { email, password });
+        const response = await performAuthMutation(AUTH_ENDPOINTS.login, { email, password });
 
         if (!response.success) {
           const resolvedMessage = response.error ?? response.message ?? "Invalid login credentials.";
@@ -441,7 +394,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const register = useCallback(
     async (email: string, password: string, username: string): Promise<AuthHandlerResult> => {
       try {
-        const response = await performAuthMutation("/api/auth/register", {
+        const response = await performAuthMutation(AUTH_ENDPOINTS.register, {
           email,
           password,
           username,

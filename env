@@ -1,2 +1,1 @@
-EXPO_PUBLIC_API_URL=http://localhost:8787
-EXPO_PUBLIC_API_PORT=8787
+EXPO_PUBLIC_API_URL="https://MovieDBR.com"
