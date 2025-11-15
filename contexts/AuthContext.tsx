@@ -1,3 +1,4 @@
+import { TRPCClientError } from "@trpc/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import * as SecureStore from "expo-secure-store";
@@ -124,6 +125,25 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
   password: undefined,
   createdAt: data.createdAt,
 });
+
+const resolveAuthErrorMessage = (error: unknown): string => {
+  if (error instanceof TRPCClientError) {
+    const dataMessage = typeof error.data?.message === "string" ? error.data.message : null;
+    if (typeof error.message === "string" && error.message.toLowerCase().includes("unexpected token")) {
+      return "Unable to reach the authentication service. Please check your connection and try again.";
+    }
+    if (dataMessage && dataMessage.length > 0) {
+      return dataMessage;
+    }
+    if (typeof error.message === "string" && error.message.length > 0) {
+      return error.message;
+    }
+  }
+  if (error instanceof Error && typeof error.message === "string" && error.message.length > 0) {
+    return error.message;
+  }
+  return "Unable to process the request. Please try again.";
+};
 
 const fetchCurrentUser = async (token: string): Promise<BackendUserPayload | null> => {
   try {
@@ -291,8 +311,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           destination: resolveRoleDestination(refreshed.user.role),
         };
       } catch (error) {
-        console.error("AuthContext login error", error);
-        return { success: false, error: "Unable to login. Please try again." };
+        const message = resolveAuthErrorMessage(error);
+        console.error("AuthContext login error", message, error);
+        return { success: false, error: message };
       }
     },
     [clearSession, persistSession, refreshAuthUser]
@@ -332,8 +353,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           destination: resolveRoleDestination(refreshed.user.role),
         };
       } catch (error) {
-        console.error("AuthContext register error", error);
-        return { success: false, error: "Unable to register. Please try again." };
+        const message = resolveAuthErrorMessage(error);
+        console.error("AuthContext register error", message, error);
+        return { success: false, error: message };
       }
     },
     [clearSession, persistSession, refreshAuthUser]
@@ -372,8 +394,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         console.log("AuthContext updateAuthUser", mapped.id);
         return { success: true, user: mapped } as const;
       } catch (error) {
-        console.error("AuthContext updateAuthUser error", error);
-        return { success: false, error: "Profile update failed." } as const;
+        const message = resolveAuthErrorMessage(error);
+        console.error("AuthContext updateAuthUser error", message, error);
+        return { success: false, error: message } as const;
       }
     },
     [authUser]
@@ -399,8 +422,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         return { success: true, user: mapBackendUser(response.user as BackendUserPayload) } as const;
       } catch (error) {
-        console.error("AuthContext assignRole error", error);
-        return { success: false, error: "Role assignment failed." } as const;
+        const message = resolveAuthErrorMessage(error);
+        console.error("AuthContext assignRole error", message, error);
+        return { success: false, error: message } as const;
       }
     },
     [authUser]
