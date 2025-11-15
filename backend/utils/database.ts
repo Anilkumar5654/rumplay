@@ -101,43 +101,6 @@ const DEFAULT_DB: DatabaseShape = {
   channels: [],
 };
 
-const SEED_USERS: {
-  email: string;
-  username: string;
-  displayName: string;
-  password: string;
-  role: UserRole;
-}[] = [
-  {
-    email: "viewer.demo@example.com",
-    username: "viewerDemo",
-    displayName: "Viewer Demo",
-    password: "ViewerPass123!",
-    role: "user",
-  },
-  {
-    email: "creator.demo@example.com",
-    username: "creatorDemo",
-    displayName: "Creator Demo",
-    password: "CreatorPass123!",
-    role: "creator",
-  },
-  {
-    email: "admin.demo@example.com",
-    username: "adminDemo",
-    displayName: "Admin Demo",
-    password: "AdminPass123!",
-    role: "admin",
-  },
-  {
-    email: "565413anil@gmail.com",
-    username: "superAdmin",
-    displayName: "Super Admin",
-    password: "SuperAdmin123!",
-    role: "superadmin",
-  },
-];
-
 const readDb = (): DatabaseShape => {
   if (!existsSync(dbPath)) {
     writeFileSync(dbPath, JSON.stringify(DEFAULT_DB, null, 2), { encoding: "utf-8" });
@@ -255,21 +218,7 @@ export const findUserById = (id: string): StoredUser | null => {
   return db.users.find((user) => user.id === id) ?? null;
 };
 
-const ensureSeedUsers = () => {
-  try {
-    for (const seed of SEED_USERS) {
-      const existing = findUserByEmail(seed.email);
-      if (!existing) {
-        console.log(`[DB] Seeding default ${seed.role} account for ${seed.email}`);
-        createUser(seed);
-      }
-    }
-  } catch (error) {
-    console.error("[DB] Failed to seed default users", error);
-  }
-};
 
-ensureSeedUsers();
 
 export const verifyPassword = (user: StoredUser, password: string): boolean => {
   const computed = hashPassword(password, user.salt);

@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { theme } from "@/constants/theme";
-import { useAppState } from "@/contexts/AppStateContext";
+import { theme } from "../../constants/theme";
+import { useAppState } from "../../contexts/AppStateContext";
+import { useAuth } from "../../contexts/AuthContext";
 
 const { width } = Dimensions.get("window");
 
@@ -11,7 +12,14 @@ export default function SubscriptionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { videos, currentUser, channels } = useAppState();
+  const { isAuthenticated, isAuthLoading } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isAuthenticated, isAuthLoading, router]);
 
   const subscribedChannelIds = currentUser.subscriptions.map((s) => s.channelId);
   const subscribedVideos = videos.filter((v) => 

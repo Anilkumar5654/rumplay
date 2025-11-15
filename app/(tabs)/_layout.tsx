@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from "expo-router";
-import { Home, Compass, PlaySquare, Tv } from "lucide-react-native";
+import { Home, Compass, PlaySquare, Tv, UserCircle } from "lucide-react-native";
 import React from "react";
 import { View, Image, StyleSheet, ActivityIndicator } from "react-native";
 import { theme } from "../../constants/theme";
@@ -53,22 +53,10 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="upload"
+          name="shorts"
           options={{
             title: "Shorts",
             tabBarIcon: ({ color, size }) => <PlaySquare color={color} size={size + 4} />,
-          }}
-          listeners={{
-            tabPress: (event) => {
-              event.preventDefault();
-              requireAuth({
-                redirectPath: "/shorts-feed",
-                reason: "Sign in to watch and share Shorts.",
-                onAuthenticated: () => {
-                  router.push("/shorts-feed");
-                },
-              });
-            },
           }}
         />
         <Tabs.Screen
@@ -79,14 +67,16 @@ export default function TabLayout() {
           }}
           listeners={{
             tabPress: (event) => {
-              event.preventDefault();
-              requireAuth({
-                redirectPath: "/(tabs)/subscriptions",
-                reason: "Sign in to view channels you follow.",
-                onAuthenticated: () => {
-                  router.push("/(tabs)/subscriptions");
-                },
-              });
+              if (!isAuthenticated) {
+                event.preventDefault();
+                requireAuth({
+                  redirectPath: "/(tabs)/subscriptions",
+                  reason: "Sign in to view channels you follow.",
+                  onAuthenticated: () => {
+                    router.push("/(tabs)/subscriptions");
+                  },
+                });
+              }
             },
           }}
         />
@@ -94,37 +84,34 @@ export default function TabLayout() {
           name="profile"
           options={{
             title: "Profile",
-            tabBarIcon: ({ focused }) => {
-              if (isAuthenticated && authUser?.avatar) {
-                return (
-                  <Image
-                    source={{ uri: authUser.avatar }}
-                    style={[
-                      styles.profileImage,
-                      focused && styles.profileImageActive,
-                    ]}
-                    testID="tab-profile-avatar"
-                  />
-                );
-              }
+            tabBarIcon: ({ color, size, focused }) => {
+              const defaultImage = "https://via.placeholder.com/32/4A5568/FFFFFF?text=U";
+              const avatarUri = isAuthenticated && authUser?.avatar ? authUser.avatar : defaultImage;
+              
               return (
-                <View
-                  style={[styles.profilePlaceholder, focused && styles.profileImageActive]}
-                  testID="tab-profile-placeholder"
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={[
+                    styles.profileImage,
+                    focused && styles.profileImageActive,
+                  ]}
+                  testID="tab-profile-avatar"
                 />
               );
             },
           }}
           listeners={{
             tabPress: (event) => {
-              event.preventDefault();
-              requireAuth({
-                redirectPath: "/profile",
-                reason: "Sign in to manage your profile.",
-                onAuthenticated: () => {
-                  router.push("/profile");
-                },
-              });
+              if (!isAuthenticated) {
+                event.preventDefault();
+                requireAuth({
+                  redirectPath: "/(tabs)/profile",
+                  reason: "Sign in to manage your profile.",
+                  onAuthenticated: () => {
+                    router.push("/(tabs)/profile");
+                  },
+                });
+              }
             },
           }}
         />
@@ -154,12 +141,5 @@ const styles = StyleSheet.create({
   profileImageActive: {
     borderColor: theme.colors.primary,
   },
-  profilePlaceholder: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
+
 });

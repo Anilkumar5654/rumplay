@@ -1,13 +1,13 @@
-import React, { useState, useMemo } from "react";
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, FlatList, Dimensions } from "react-native";
+import React, { useState, useMemo, useEffect } from "react";
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit, Shield } from "lucide-react-native";
-import VideoEditModal from "@/components/VideoEditModal";
-import { Video } from "@/types";
-import { theme } from "@/constants/theme";
-import { useAppState } from "@/contexts/AppStateContext";
-import { useAuth } from "@/contexts/AuthContext";
+import VideoEditModal from "../../components/VideoEditModal";
+import { Video } from "../../types";
+import { theme } from "../../constants/theme";
+import { useAppState } from "../../contexts/AppStateContext";
+import { useAuth } from "../../contexts/AuthContext";
 
 const { width } = Dimensions.get("window");
 
@@ -15,10 +15,16 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { currentUser, channels, videos } = useAppState();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isAuthenticated, isAuthLoading } = useAuth();
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [showMyVideos, setShowMyVideos] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isAuthenticated, isAuthLoading, router]);
 
   const userChannel = currentUser.channelId 
     ? channels.find((ch) => ch.id === currentUser.channelId)
