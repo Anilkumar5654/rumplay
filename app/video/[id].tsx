@@ -70,6 +70,9 @@ export default function VideoPlayerScreen() {
   const panY = useRef(new Animated.Value(0)).current;
   const lastSaveTime = useRef(0);
 
+  const addToWatchHistoryRef = useRef<typeof addToWatchHistory>(addToWatchHistory);
+  const getWatchPositionRef = useRef<typeof getWatchPosition>(getWatchPosition);
+
   const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -106,18 +109,26 @@ export default function VideoPlayerScreen() {
   ).current;
 
   useEffect(() => {
+    addToWatchHistoryRef.current = addToWatchHistory;
+  }, [addToWatchHistory]);
+
+  useEffect(() => {
+    getWatchPositionRef.current = getWatchPosition;
+  }, [getWatchPosition]);
+
+  useEffect(() => {
     if (videoId) {
       setCurrentVideoId(videoId);
-      addToWatchHistory(videoId);
+      addToWatchHistoryRef.current(videoId);
 
-      const savedPosition = getWatchPosition(videoId);
+      const savedPosition = getWatchPositionRef.current(videoId);
       if (savedPosition > 0 && videoRef.current) {
         setTimeout(() => {
           videoRef.current?.setPositionAsync(savedPosition);
         }, 500);
       }
     }
-  }, [videoId, setCurrentVideoId, addToWatchHistory, getWatchPosition, videoRef]);
+  }, [videoId, setCurrentVideoId, videoRef]);
 
   const userReaction = currentUser.reactions.find((r) => r.videoId === video.id);
   const isSubscribed = currentUser.subscriptions.some((s) => s.channelId === video.channelId);
@@ -133,7 +144,11 @@ export default function VideoPlayerScreen() {
       const now = Date.now();
       if (now - lastSaveTime.current > 5000) {
         lastSaveTime.current = now;
-        addToWatchHistory(videoId, status.positionMillis, status.durationMillis || 0);
+        addToWatchHistoryRef.current(
+          videoId,
+          status.positionMillis,
+          status.durationMillis || 0
+        );
       }
     }
   };
