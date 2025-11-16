@@ -18,9 +18,16 @@ export const getEnvApiBaseUrl = (): string => {
   return cachedBaseUrl;
 };
 
+const ensureApiRoot = (baseUrl: string): string => {
+  if (/\/api$/i.test(baseUrl)) {
+    return baseUrl;
+  }
+  return `${baseUrl}/api`;
+};
+
 export const getEnvApiRootUrl = (): string => {
   const base = getEnvApiBaseUrl();
-  return `${base}/api`;
+  return ensureApiRoot(base);
 };
 
 export const getEnvTrpcEndpoint = (): string => {
