@@ -21,7 +21,6 @@ import { useAppState } from "../contexts/AppStateContext";
 import { useAuth } from "../contexts/AuthContext";
 import { Video, VideoUploadData, UploadProgress, UploadFolder } from "../types";
 import { getEnvApiBaseUrl, getEnvUploadEndpoint } from "../utils/env";
-import { uploadMediaFile } from "../utils/uploadHelpers";
 
 const CATEGORIES = [
   "Technology",
@@ -140,29 +139,20 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
 
 
 
-  const uploadMediaAsset = async (folder: UploadFolder, meta: MediaMeta) => {
-    if (!uploadEndpoint) {
-      throw new Error("Backend URL not configured");
+  const createFileObject = async (uri: string, fileName: string, mimeType: string) => {
+    if (Platform.OS === "web") {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error("Unable to access file data");
+      }
+      const blob = await response.blob();
+      return new File([blob], fileName, { type: mimeType });
     }
-    if (!authToken) {
-      throw new Error("Not authenticated");
-    }
-    console.log(`${LOG_PREFIX} Uploading asset`, { folder, name: meta.name });
-    
-    const result = await uploadMediaFile(meta.uri, meta.name, folder, authToken);
-    
-    if (!result.success || !result.url) {
-      const message = result.error ?? "Upload failed";
-      console.error(`${LOG_PREFIX} Upload failed`, { folder, message });
-      throw new Error(message);
-    }
-    
+
     return {
-      url: result.url,
-      path: result.path ?? "",
-      filename: result.filename ?? meta.name,
-      mimeType: meta.mimeType,
-      size: 0,
+      uri,
+      name: fileName,
+      type: mimeType,
     };
   };
 
@@ -398,27 +388,91 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
       return;
     }
 
+    if (!authToken) {
+      Alert.alert("Error", "Not authenticated. Please login again.");
+      return;
+    }
+
     try {
-      setProgress({ progress: 5, status: "uploading", message: "Uploading video..." });
+      setProgress({ progress: 10, status: "uploading", message: "Preparing upload..." });
 
       const resolvedVideoMeta = ensureMeta(videoMeta, uploadData.videoUri ?? "", "video", "mp4");
-      const videoFolder: UploadFolder = uploadData.isShort ? "shorts" : "videos";
-      const uploadedVideo = await uploadMediaAsset(videoFolder, resolvedVideoMeta);
-
-      setProgress({ progress: 65, status: "uploading", message: "Uploading thumbnail..." });
       const resolvedThumbnailMeta = ensureMeta(thumbnailMeta, uploadData.thumbnailUri ?? "", "thumbnail", "jpg");
-      const uploadedThumbnail = await uploadMediaAsset("thumbnails", resolvedThumbnailMeta);
+
+      console.log(`${LOG_PREFIX} Creating FormData for upload`);
+      const formData = new FormData();
+
+      const videoFile = await createFileObject(resolvedVideoMeta.uri, resolvedVideoMeta.name, resolvedVideoMeta.mimeType);
+      formData.append("file", videoFile as any);
+
+      const thumbnailFile = await createFileObject(resolvedThumbnailMeta.uri, resolvedThumbnailMeta.name, resolvedThumbnailMeta.mimeType);
+      formData.append("thumbnail", thumbnailFile as any);
+
+      formData.append("title", uploadData.title || "Untitled Video");
+      formData.append("description", uploadData.description || "");
+      formData.append("category", uploadData.category || "Technology");
+      formData.append("visibility", uploadData.visibility || "public");
+
+      if (uploadData.tags && uploadData.tags.length > 0) {
+        uploadData.tags.forEach((tag) => {
+          formData.append("tags[]", tag);
+        });
+      }
+
+      console.log(`${LOG_PREFIX} FINAL FORM DATA:`, Array.from((formData as any).entries()));
+
+      setProgress({ progress: 30, status: "uploading", message: "Uploading video..." });
+
+      const uploadUrl = `${apiBase}/api/video/upload.php`;
+      console.log(`${LOG_PREFIX} Uploading to: ${uploadUrl}`);
+
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          Accept: "application/json",
+        },
+        body: formData,
+      });
+
+      console.log(`${LOG_PREFIX} Upload response status:`, response.status);
+
+      if (response.status === 401) {
+        console.error(`${LOG_PREFIX} 401 Unauthorized - Token may be invalid`);
+        Alert.alert("Authentication Error", "Your session has expired. Please login again.");
+        setProgress({ progress: 0, status: "error", message: "Authentication failed" });
+        return;
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        const rawText = await response.text();
+        console.error(`${LOG_PREFIX} Non-JSON response:`, rawText.substring(0, 500));
+        throw new Error("Server returned invalid response. Expected JSON.");
+      }
+
+      const result = await response.json();
+      console.log(`${LOG_PREFIX} Upload result:`, result);
+
+      if (!response.ok || !result.success) {
+        const errorMessage = result.error ?? result.message ?? "Upload failed";
+        console.error(`${LOG_PREFIX} Upload failed:`, errorMessage);
+        throw new Error(errorMessage);
+      }
 
       setProgress({ progress: 85, status: "processing", message: "Saving video..." });
+
+      const videoUrl = result.file_url ?? result.video_url ?? result.url ?? "";
+      const thumbnailUrl = result.thumbnail_url ?? result.thumbnail ?? "";
 
       const userChannel = currentUser.channelId ? getChannelById(currentUser.channelId) : null;
 
       const newVideo: Video = {
-        id: `v${Date.now()}`,
+        id: result.id ?? `v${Date.now()}`,
         title: uploadData.title || "Untitled Video",
         description: uploadData.description || "",
-        thumbnail: uploadedThumbnail.url,
-        videoUrl: uploadedVideo.url,
+        thumbnail: thumbnailUrl,
+        videoUrl: videoUrl,
         channelId: currentUser.channelId || "ch1",
         channelName: userChannel?.name || currentUser.displayName,
         channelAvatar: userChannel?.avatar || currentUser.avatar,
@@ -455,7 +509,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
       }, 350);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload failed";
-      console.error(`${LOG_PREFIX} Upload error`, error);
+      console.error(`${LOG_PREFIX} Upload error:`, error);
       setProgress({ progress: 0, status: "error", message });
       Alert.alert("Upload Failed", message);
     }
