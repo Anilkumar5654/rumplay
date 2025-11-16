@@ -406,7 +406,7 @@ app.post("/api/auth/login", async (c) => {
   }
 
   const email = parsed.data.email.toLowerCase();
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
 
   if (!user) {
     return c.json({ success: false, error: "Invalid credentials" }, 401);
@@ -418,7 +418,7 @@ app.post("/api/auth/login", async (c) => {
     return c.json({ success: false, error: "Invalid credentials" }, 401);
   }
 
-  const session = createSession(user.id);
+  const session = await createSession(user.id);
   return c.json({ success: true, token: session.token, user: sanitizeUser(user) });
 });
 
@@ -433,7 +433,7 @@ app.post("/api/auth/register", async (c) => {
   try {
     const normalizedEmail = parsed.data.email.toLowerCase();
     const role = normalizedEmail === SUPER_ADMIN_EMAIL ? "superadmin" : "user";
-    const user = createUser({
+    const user = await createUser({
       email: normalizedEmail,
       username: parsed.data.username,
       displayName: parsed.data.displayName,
@@ -441,40 +441,40 @@ app.post("/api/auth/register", async (c) => {
       role,
     });
 
-    const session = createSession(user.id);
+    const session = await createSession(user.id);
     return c.json({ success: true, token: session.token, user: sanitizeUser(user) });
   } catch (error) {
     return c.json({ success: false, error: error instanceof Error ? error.message : "Registration failed" }, 400);
   }
 });
 
-app.get("/api/auth/me", (c) => {
+app.get("/api/auth/me", async (c) => {
   const token = normalizeToken(c.req.header("authorization") ?? null);
   if (!token) {
     return c.json({ success: false, error: "Missing token" }, 401);
   }
 
-  const session = findSession(token);
+  const session = await findSession(token);
   if (!session) {
     return c.json({ success: false, error: "Invalid session" }, 401);
   }
 
-  const user = findUserById(session.userId);
+  const user = await findUserById(session.userId);
   if (!user) {
-    revokeSession(token);
+    await revokeSession(token);
     return c.json({ success: false, error: "User not found" }, 401);
   }
 
   return c.json({ success: true, user: sanitizeUser(user) });
 });
 
-app.post("/api/auth/logout", (c) => {
+app.post("/api/auth/logout", async (c) => {
   const token = normalizeToken(c.req.header("authorization") ?? null);
   if (!token) {
     return c.json({ success: true });
   }
 
-  revokeSession(token);
+  await revokeSession(token);
   return c.json({ success: true });
 });
 

@@ -12,7 +12,7 @@ export const loginProcedure = publicProcedure
   )
   .mutation(async ({ input }) => {
     const { email, password } = input;
-    const user = findUserByEmail(email.toLowerCase());
+    const user = await findUserByEmail(email.toLowerCase());
 
     if (!user) {
       return {
@@ -30,7 +30,7 @@ export const loginProcedure = publicProcedure
       } as const;
     }
 
-    const session = createSession(user.id);
+    const session = await createSession(user.id);
 
     return {
       success: true,

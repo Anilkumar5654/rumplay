@@ -4,8 +4,8 @@ import { createRole, listRoles } from "../../../../utils/database";
 
 export const listRolesProcedure = adminProcedure
   .input(z.void())
-  .query(() => {
-    const roles = listRoles();
+  .query(async () => {
+    const roles = await listRoles();
 
     return {
       success: true,
@@ -20,8 +20,8 @@ export const createRoleProcedure = superAdminProcedure
       description: z.string().min(4).max(160),
     })
   )
-  .mutation(({ input }) => {
-    const role = createRole(input.name, input.description);
+  .mutation(async ({ input }) => {
+    const role = await createRole(input.name, input.description);
 
     return {
       success: true,

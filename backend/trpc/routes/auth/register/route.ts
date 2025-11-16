@@ -16,7 +16,7 @@ export const registerProcedure = publicProcedure
   .mutation(async ({ input }) => {
     try {
       const role = input.email.toLowerCase() === SUPER_ADMIN_EMAIL ? "superadmin" : "user";
-      const user = createUser({
+      const user = await createUser({
         email: input.email,
         username: input.username,
         displayName: input.displayName,
@@ -24,7 +24,7 @@ export const registerProcedure = publicProcedure
         role,
       });
 
-      const session = createSession(user.id);
+      const session = await createSession(user.id);
 
       return {
         success: true,

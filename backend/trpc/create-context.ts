@@ -31,7 +31,7 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
     };
   }
 
-  const session = findSession(token);
+  const session = await findSession(token);
 
   if (!session) {
     return {
@@ -41,7 +41,7 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
     };
   }
 
-  const user = findUserById(session.userId);
+  const user = await findUserById(session.userId);
 
   return {
     req: opts.req,

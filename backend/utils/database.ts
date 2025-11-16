@@ -1,9 +1,40 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import path from "path";
 import crypto from "crypto";
-import type { Membership, Subscription, UserReaction, UserRole, WatchHistoryItem } from "../../types";
+import { RowDataPacket } from "mysql2/promise";
+import type { Membership, Subscription, UserReaction, UserRole, WatchHistoryItem, Monetization } from "../../types";
+import { getPool } from "./mysqlClient";
 
-type StoredUser = {
+export type StoredRole = {
+  id: string;
+  name: UserRole | (string & {});
+  description: string;
+  createdAt: string;
+};
+
+export type StoredSession = {
+  token: string;
+  userId: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type StoredChannel = {
+  id: string;
+  userId: string;
+  name: string;
+  handle: string;
+  avatar: string | null;
+  banner: string | null;
+  description: string;
+  subscriberCount: number;
+  totalViews: number;
+  totalWatchHours: number;
+  verified: boolean;
+  monetization: Monetization;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StoredUser = {
   id: string;
   email: string;
   username: string;
@@ -14,7 +45,7 @@ type StoredUser = {
   bio: string;
   phone: string | null;
   channelId: string | null;
-  role: UserRole;
+  role: UserRole | (string & {});
   rolesAssignedBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -27,378 +58,599 @@ type StoredUser = {
   likedVideos: string[];
 };
 
-type StoredSession = {
-  token: string;
-  userId: string;
-  createdAt: string;
-  expiresAt: string;
-};
-
-type StoredRole = {
+type RoleRow = RowDataPacket & {
   id: string;
-  name: UserRole | (string & {});
+  name: string;
   description: string;
-  createdAt: string;
+  created_at: Date;
 };
 
-type StoredChannel = {
+type SessionRow = RowDataPacket & {
+  token: string;
+  user_id: string;
+  created_at: Date;
+  expires_at: Date;
+};
+
+type ChannelRow = RowDataPacket & {
   id: string;
-  userId: string;
+  user_id: string;
   name: string;
   handle: string;
   avatar: string | null;
   banner: string | null;
   description: string;
-  createdAt: string;
-  updatedAt: string;
+  subscriber_count: number;
+  total_views: number;
+  total_watch_hours: number;
+  verified: number;
+  monetization: string | Buffer | null;
+  created_at: Date;
+  updated_at: Date;
 };
 
-type DatabaseShape = {
-  users: StoredUser[];
-  roles: StoredRole[];
-  sessions: StoredSession[];
-  channels: StoredChannel[];
+type UserRow = RowDataPacket & {
+  id: string;
+  username: string;
+  name: string;
+  email: string;
+  password_hash: string;
+  password_salt: string;
+  role: string;
+  profile_pic: string | null;
+  bio: string | null;
+  phone: string | null;
+  channel_id: string | null;
+  roles_assigned_by: string | null;
+  subscriptions: string | Buffer | null;
+  memberships: string | Buffer | null;
+  reactions: string | Buffer | null;
+  watch_history: string | Buffer | null;
+  watch_history_detailed: string | Buffer | null;
+  saved_videos: string | Buffer | null;
+  liked_videos: string | Buffer | null;
+  created_at: Date;
+  updated_at: Date;
 };
 
-const ensureDataDir = () => {
-  const dataDir = path.join(process.cwd(), "backend", "data");
-  if (!existsSync(dataDir)) {
-    mkdirSync(dataDir, { recursive: true });
+const defaultMonetization: Monetization = {
+  enabled: false,
+  enabledAt: null,
+  eligibility: {
+    minSubscribers: 1000,
+    minWatchHours: 4000,
+  },
+  adsEnabled: false,
+  membershipTiers: [],
+  estimatedRPM: 3,
+  earnings: {
+    total: 0,
+    monthly: 0,
+    lastPayout: null,
+  },
+  analytics: {
+    totalViews: 0,
+    adImpressions: 0,
+    adClicks: 0,
+    membershipRevenue: 0,
+  },
+  pendingReports: 0,
+};
+
+const parseJsonField = <T>(value: string | Buffer | null, fallback: T): T => {
+  if (!value) {
+    return fallback;
   }
-  return dataDir;
-};
-
-const dbPath = path.join(ensureDataDir(), "database.json");
-
-const DEFAULT_DB: DatabaseShape = {
-  users: [],
-  roles: [
-    {
-      id: "role-user",
-      name: "user",
-      description: "Default viewer role",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "role-creator",
-      name: "creator",
-      description: "Creator role",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "role-admin",
-      name: "admin",
-      description: "Admin role",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "role-superadmin",
-      name: "superadmin",
-      description: "Super admin role",
-      createdAt: new Date().toISOString(),
-    },
-  ],
-  sessions: [],
-  channels: [],
-};
-
-const readDb = (): DatabaseShape => {
-  if (!existsSync(dbPath)) {
-    writeFileSync(dbPath, JSON.stringify(DEFAULT_DB, null, 2), { encoding: "utf-8" });
-    return JSON.parse(JSON.stringify(DEFAULT_DB)) as DatabaseShape;
+  const input = Buffer.isBuffer(value) ? value.toString("utf-8") : value;
+  if (input.length === 0) {
+    return fallback;
   }
-
   try {
-    const raw = readFileSync(dbPath, { encoding: "utf-8" });
-    const parsed = JSON.parse(raw) as DatabaseShape;
-    return {
-      ...DEFAULT_DB,
-      ...parsed,
-      roles: parsed.roles && parsed.roles.length > 0 ? parsed.roles : DEFAULT_DB.roles,
-    };
+    return JSON.parse(input) as T;
   } catch (error) {
-    console.error("[DB] Failed to read database.json", error);
-    return JSON.parse(JSON.stringify(DEFAULT_DB)) as DatabaseShape;
+    console.error("[DB] JSON parse error", error);
+    return fallback;
   }
 };
 
-const writeDb = (db: DatabaseShape): void => {
-  try {
-    writeFileSync(dbPath, JSON.stringify(db, null, 2), { encoding: "utf-8" });
-  } catch (error) {
-    console.error("[DB] Failed to write database.json", error);
-  }
-};
+const mapRoleRow = (row: RoleRow): StoredRole => ({
+  id: row.id,
+  name: row.name as StoredRole["name"],
+  description: row.description,
+  createdAt: row.created_at.toISOString(),
+});
 
-export const listRoles = () => {
-  const db = readDb();
-  return db.roles;
-};
+const mapChannelRow = (row: ChannelRow): StoredChannel => ({
+  id: row.id,
+  userId: row.user_id,
+  name: row.name,
+  handle: row.handle,
+  avatar: row.avatar,
+  banner: row.banner,
+  description: row.description,
+  subscriberCount: row.subscriber_count,
+  totalViews: row.total_views,
+  totalWatchHours: row.total_watch_hours,
+  verified: row.verified === 1,
+  monetization: parseJsonField(row.monetization, defaultMonetization),
+  createdAt: row.created_at.toISOString(),
+  updatedAt: row.updated_at.toISOString(),
+});
 
-export const createRole = (name: string, description: string): StoredRole => {
-  const normalized = name.toLowerCase() as StoredRole["name"];
-  const db = readDb();
-
-  if (db.roles.some((role) => role.name === normalized)) {
-    throw new Error("Role already exists");
-  }
-
-  const role: StoredRole = {
-    id: `role-${crypto.randomUUID()}`,
-    name: normalized,
-    description,
-    createdAt: new Date().toISOString(),
+const mapUserRow = (row: UserRow): StoredUser => {
+  const fallbackAvatar = `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(row.username)}`;
+  return {
+    id: row.id,
+    email: row.email,
+    username: row.username,
+    displayName: row.name,
+    passwordHash: row.password_hash,
+    salt: row.password_salt,
+    avatar: row.profile_pic ?? fallbackAvatar,
+    bio: row.bio ?? "",
+    phone: row.phone,
+    channelId: row.channel_id,
+    role: row.role as StoredUser["role"],
+    rolesAssignedBy: row.roles_assigned_by ?? undefined,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+    subscriptions: parseJsonField<Subscription[]>(row.subscriptions, []),
+    memberships: parseJsonField<Membership[]>(row.memberships, []),
+    reactions: parseJsonField<UserReaction[]>(row.reactions, []),
+    watchHistory: parseJsonField<string[]>(row.watch_history, []),
+    watchHistoryDetailed: parseJsonField<WatchHistoryItem[]>(row.watch_history_detailed, []),
+    savedVideos: parseJsonField<string[]>(row.saved_videos, []),
+    likedVideos: parseJsonField<string[]>(row.liked_videos, []),
   };
-
-  db.roles.push(role);
-  writeDb(db);
-  return role;
 };
+
+const ensureDefaultRoles = async () => {
+  const pool = getPool();
+  const defaults: { name: string; description: string }[] = [
+    { name: "user", description: "Default viewer role" },
+    { name: "creator", description: "Creator role" },
+    { name: "admin", description: "Admin role" },
+    { name: "superadmin", description: "Super admin role" },
+  ];
+  await Promise.all(
+    defaults.map(async (item) => {
+      await pool.execute(
+        "INSERT IGNORE INTO roles (name, description) VALUES (:name, :description)",
+        { name: item.name, description: item.description }
+      );
+    })
+  );
+};
+
+void ensureDefaultRoles().catch((error) => {
+  console.error("[DB] Failed to ensure default roles", error);
+});
 
 const hashPassword = (password: string, salt: string) => {
   return crypto.scryptSync(password, salt, 64).toString("hex");
 };
 
-export const createUser = (params: {
+export const listRoles = async (): Promise<StoredRole[]> => {
+  const pool = getPool();
+  const [rows] = await pool.query<RoleRow[]>(
+    "SELECT id, name, description, created_at FROM roles ORDER BY created_at ASC"
+  );
+  return rows.map(mapRoleRow);
+};
+
+export const createRole = async (name: string, description: string): Promise<StoredRole> => {
+  const pool = getPool();
+  const normalized = name.toLowerCase();
+  const [existing] = await pool.query<RoleRow[]>(
+    "SELECT id, name, description, created_at FROM roles WHERE name = :name LIMIT 1",
+    { name: normalized }
+  );
+  if (existing.length > 0) {
+    throw new Error("Role already exists");
+  }
+  await pool.execute(
+    "INSERT INTO roles (name, description) VALUES (:name, :description)",
+    { name: normalized, description }
+  );
+  const [rows] = await pool.query<RoleRow[]>(
+    "SELECT id, name, description, created_at FROM roles WHERE name = :name LIMIT 1",
+    { name: normalized }
+  );
+  if (rows.length === 0) {
+    throw new Error("Failed to create role");
+  }
+  return mapRoleRow(rows[0]);
+};
+
+export const createUser = async (params: {
   email: string;
   username: string;
   displayName: string;
   password: string;
-  role?: UserRole;
-}): StoredUser => {
-  const db = readDb();
-
-  if (db.users.some((user) => user.email.toLowerCase() === params.email.toLowerCase())) {
-    throw new Error("Email already exists");
-  }
-
-  if (db.users.some((user) => user.username.toLowerCase() === params.username.toLowerCase())) {
-    throw new Error("Username already exists");
-  }
-
+  role?: UserRole | (string & {});
+  avatar?: string | null;
+  bio?: string;
+  phone?: string | null;
+}): Promise<StoredUser> => {
+  const pool = getPool();
   const salt = crypto.randomBytes(16).toString("hex");
   const passwordHash = hashPassword(params.password, salt);
-  const now = new Date().toISOString();
-
-  const fallbackAvatar = `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(params.username)}`;
-
-  const user: StoredUser = {
-    id: `user-${crypto.randomUUID()}`,
-    email: params.email.toLowerCase(),
-    username: params.username,
-    displayName: params.displayName,
-    passwordHash,
-    salt,
-    avatar: fallbackAvatar,
-    bio: "",
-    phone: null,
-    channelId: null,
-    role: params.role ?? "user",
-    createdAt: now,
-    updatedAt: now,
-    subscriptions: [],
-    memberships: [],
-    reactions: [],
-    watchHistory: [],
-    watchHistoryDetailed: [],
-    savedVideos: [],
-    likedVideos: [],
-  };
-
-  db.users.push(user);
-  writeDb(db);
-  return user;
+  const id = crypto.randomUUID();
+  const fallbackAvatar = params.avatar ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(params.username)}`;
+  try {
+    await pool.execute(
+      `INSERT INTO users (
+        id,
+        username,
+        name,
+        email,
+        password_hash,
+        password_salt,
+        role,
+        profile_pic,
+        bio,
+        phone,
+        channel_id,
+        roles_assigned_by,
+        subscriptions,
+        memberships,
+        reactions,
+        watch_history,
+        watch_history_detailed,
+        saved_videos,
+        liked_videos
+      ) VALUES (
+        :id,
+        :username,
+        :name,
+        :email,
+        :passwordHash,
+        :salt,
+        :role,
+        :profilePic,
+        :bio,
+        :phone,
+        NULL,
+        NULL,
+        :subscriptions,
+        :memberships,
+        :reactions,
+        :watchHistory,
+        :watchHistoryDetailed,
+        :savedVideos,
+        :likedVideos
+      )`,
+      {
+        id,
+        username: params.username,
+        name: params.displayName,
+        email: params.email.toLowerCase(),
+        passwordHash,
+        salt,
+        role: params.role ?? "user",
+        profilePic: fallbackAvatar,
+        bio: params.bio ?? "",
+        phone: params.phone ?? null,
+        subscriptions: JSON.stringify([]),
+        memberships: JSON.stringify([]),
+        reactions: JSON.stringify([]),
+        watchHistory: JSON.stringify([]),
+        watchHistoryDetailed: JSON.stringify([]),
+        savedVideos: JSON.stringify([]),
+        likedVideos: JSON.stringify([]),
+      }
+    );
+  } catch (error) {
+    console.error("[DB] Failed to create user", error);
+    throw new Error("Unable to create user");
+  }
+  const created = await findUserById(id);
+  if (!created) {
+    throw new Error("User creation failed");
+  }
+  return created;
 };
 
-export const findUserByEmail = (email: string): StoredUser | null => {
-  const db = readDb();
-  return db.users.find((user) => user.email === email.toLowerCase()) ?? null;
+export const findUserByEmail = async (email: string): Promise<StoredUser | null> => {
+  const pool = getPool();
+  const [rows] = await pool.query<UserRow[]>(
+    "SELECT * FROM users WHERE email = :email LIMIT 1",
+    { email: email.toLowerCase() }
+  );
+  if (rows.length === 0) {
+    return null;
+  }
+  return mapUserRow(rows[0]);
 };
 
-export const findUserById = (id: string): StoredUser | null => {
-  const db = readDb();
-  return db.users.find((user) => user.id === id) ?? null;
+export const findUserById = async (id: string): Promise<StoredUser | null> => {
+  const pool = getPool();
+  const [rows] = await pool.query<UserRow[]>("SELECT * FROM users WHERE id = :id LIMIT 1", { id });
+  if (rows.length === 0) {
+    return null;
+  }
+  return mapUserRow(rows[0]);
 };
-
-
 
 export const verifyPassword = (user: StoredUser, password: string): boolean => {
   const computed = hashPassword(password, user.salt);
   return crypto.timingSafeEqual(Buffer.from(computed, "hex"), Buffer.from(user.passwordHash, "hex"));
 };
 
-export const createSession = (userId: string, durationHours = 12): StoredSession => {
-  const db = readDb();
+export const createSession = async (userId: string, durationHours = 12): Promise<StoredSession> => {
+  const pool = getPool();
   const token = crypto.randomBytes(48).toString("hex");
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + durationHours * 60 * 60 * 1000);
-
-  const session: StoredSession = {
+  await pool.execute("DELETE FROM sessions WHERE user_id = :userId", { userId });
+  await pool.execute(
+    "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (:token, :userId, :createdAt, :expiresAt)",
+    {
+      token,
+      userId,
+      createdAt,
+      expiresAt,
+    }
+  );
+  return {
     token,
     userId,
     createdAt: createdAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
   };
-
-  db.sessions = db.sessions.filter((existing) => existing.userId !== userId);
-  db.sessions.push(session);
-  writeDb(db);
-  return session;
 };
 
-export const findSession = (token: string): StoredSession | null => {
-  const db = readDb();
-  const session = db.sessions.find((item) => item.token === token) ?? null;
-  if (!session) {
+export const findSession = async (token: string): Promise<StoredSession | null> => {
+  const pool = getPool();
+  const [rows] = await pool.query<SessionRow[]>(
+    "SELECT token, user_id, created_at, expires_at FROM sessions WHERE token = :token LIMIT 1",
+    { token }
+  );
+  if (rows.length === 0) {
     return null;
   }
-
-  const now = new Date();
-  if (now > new Date(session.expiresAt)) {
-    db.sessions = db.sessions.filter((item) => item.token !== token);
-    writeDb(db);
+  const row = rows[0];
+  if (new Date(row.expires_at) <= new Date()) {
+    await pool.execute("DELETE FROM sessions WHERE token = :token", { token });
     return null;
   }
-
-  return session;
+  return {
+    token: row.token,
+    userId: row.user_id,
+    createdAt: row.created_at.toISOString(),
+    expiresAt: row.expires_at.toISOString(),
+  };
 };
 
-export const revokeSession = (token: string): void => {
-  const db = readDb();
-  db.sessions = db.sessions.filter((item) => item.token !== token);
-  writeDb(db);
+export const revokeSession = async (token: string): Promise<void> => {
+  const pool = getPool();
+  await pool.execute("DELETE FROM sessions WHERE token = :token", { token });
 };
 
-export const updateUser = (userId: string, updates: Partial<Omit<StoredUser, "id" | "createdAt" | "passwordHash" | "salt">> & { password?: string; role?: UserRole }): StoredUser => {
-  const db = readDb();
-  const index = db.users.findIndex((user) => user.id === userId);
-  if (index === -1) {
+export const updateUser = async (
+  userId: string,
+  updates: Partial<Omit<StoredUser, "id" | "createdAt" | "passwordHash" | "salt">> & { password?: string; role?: StoredUser["role"] }
+): Promise<StoredUser> => {
+  const pool = getPool();
+  const existing = await findUserById(userId);
+  if (!existing) {
     throw new Error("User not found");
   }
-
-  const existing = db.users[index];
-  const now = new Date().toISOString();
-
-  if (updates.email && updates.email !== existing.email) {
-    if (db.users.some((user, idx) => idx !== index && user.email === updates.email)) {
+  if (updates.email && updates.email.toLowerCase() !== existing.email) {
+    const [emailRows] = await pool.query<RowDataPacket[]>(
+      "SELECT id FROM users WHERE email = :email AND id <> :id LIMIT 1",
+      { email: updates.email.toLowerCase(), id: userId }
+    );
+    if (emailRows.length > 0) {
       throw new Error("Email already exists");
     }
   }
-
   if (updates.username && updates.username !== existing.username) {
-    if (db.users.some((user, idx) => idx !== index && user.username === updates.username)) {
+    const [usernameRows] = await pool.query<RowDataPacket[]>(
+      "SELECT id FROM users WHERE username = :username AND id <> :id LIMIT 1",
+      { username: updates.username, id: userId }
+    );
+    if (usernameRows.length > 0) {
       throw new Error("Username already exists");
     }
   }
-
   let passwordHash = existing.passwordHash;
   let salt = existing.salt;
-
   if (updates.password) {
     salt = crypto.randomBytes(16).toString("hex");
     passwordHash = hashPassword(updates.password, salt);
   }
-
-  const updated: StoredUser = {
-    ...existing,
-    ...updates,
-    email: updates.email ? updates.email.toLowerCase() : existing.email,
-    username: updates.username ?? existing.username,
-    displayName: updates.displayName ?? existing.displayName,
-    avatar: updates.avatar ?? existing.avatar,
-    bio: updates.bio ?? existing.bio,
-    phone: updates.phone ?? existing.phone,
-    role: updates.role ?? existing.role,
-    passwordHash,
-    salt,
-    updatedAt: now,
-  };
-
-  db.users[index] = updated;
-  writeDb(db);
+  const avatar = updates.avatar ?? existing.avatar;
+  const bio = updates.bio ?? existing.bio;
+  const phone = updates.phone ?? existing.phone;
+  const role = updates.role ?? existing.role;
+  const subscriptions = JSON.stringify(updates.subscriptions ?? existing.subscriptions);
+  const memberships = JSON.stringify(updates.memberships ?? existing.memberships);
+  const reactions = JSON.stringify(updates.reactions ?? existing.reactions);
+  const watchHistory = JSON.stringify(updates.watchHistory ?? existing.watchHistory);
+  const watchHistoryDetailed = JSON.stringify(updates.watchHistoryDetailed ?? existing.watchHistoryDetailed);
+  const savedVideos = JSON.stringify(updates.savedVideos ?? existing.savedVideos);
+  const likedVideos = JSON.stringify(updates.likedVideos ?? existing.likedVideos);
+  await pool.execute(
+    `UPDATE users SET
+      username = :username,
+      name = :name,
+      email = :email,
+      profile_pic = :avatar,
+      bio = :bio,
+      phone = :phone,
+      channel_id = :channelId,
+      roles_assigned_by = :rolesAssignedBy,
+      role = :role,
+      password_hash = :passwordHash,
+      password_salt = :salt,
+      subscriptions = :subscriptions,
+      memberships = :memberships,
+      reactions = :reactions,
+      watch_history = :watchHistory,
+      watch_history_detailed = :watchHistoryDetailed,
+      saved_videos = :savedVideos,
+      liked_videos = :likedVideos,
+      updated_at = NOW()
+    WHERE id = :id`,
+    {
+      id: userId,
+      username: updates.username ?? existing.username,
+      name: updates.displayName ?? existing.displayName,
+      email: (updates.email ?? existing.email).toLowerCase(),
+      avatar,
+      bio,
+      phone,
+      channelId: updates.channelId ?? existing.channelId,
+      rolesAssignedBy: updates.rolesAssignedBy ?? existing.rolesAssignedBy ?? null,
+      role,
+      passwordHash,
+      salt,
+      subscriptions,
+      memberships,
+      reactions,
+      watchHistory,
+      watchHistoryDetailed,
+      savedVideos,
+      likedVideos,
+    }
+  );
+  const updated = await findUserById(userId);
+  if (!updated) {
+    throw new Error("Failed to update user");
+  }
   return updated;
 };
 
-export const upsertChannel = (userId: string, payload: Omit<StoredChannel, "id" | "createdAt" | "updatedAt" | "userId"> & { id?: string }): StoredChannel => {
-  const db = readDb();
-  const now = new Date().toISOString();
-
+export const upsertChannel = async (
+  userId: string,
+  payload: Omit<StoredChannel, "id" | "createdAt" | "updatedAt" | "userId"> & { id?: string }
+): Promise<StoredChannel> => {
+  const pool = getPool();
   if (payload.handle) {
-    const handleExists = db.channels.some((channel) => channel.handle.toLowerCase() === payload.handle.toLowerCase() && channel.userId !== userId);
-    if (handleExists) {
+    const [handleRows] = await pool.query<RowDataPacket[]>(
+      "SELECT id FROM channels WHERE handle = :handle AND user_id <> :userId",
+      { handle: payload.handle, userId }
+    );
+    if (handleRows.length > 0) {
       throw new Error("Channel handle already exists");
     }
   }
-
+  const monetization = JSON.stringify(payload.monetization ?? defaultMonetization);
   if (payload.id) {
-    const index = db.channels.findIndex((channel) => channel.id === payload.id && channel.userId === userId);
-    if (index === -1) {
+    const [existingRows] = await pool.query<ChannelRow[]>(
+      "SELECT * FROM channels WHERE id = :id AND user_id = :userId LIMIT 1",
+      { id: payload.id, userId }
+    );
+    if (existingRows.length === 0) {
       throw new Error("Channel not found");
     }
-
-    const updated: StoredChannel = {
-      ...db.channels[index],
+    await pool.execute(
+      `UPDATE channels SET
+        name = :name,
+        handle = :handle,
+        avatar = :avatar,
+        banner = :banner,
+        description = :description,
+        subscriber_count = :subscriberCount,
+        total_views = :totalViews,
+        total_watch_hours = :totalWatchHours,
+        verified = :verified,
+        monetization = :monetization,
+        updated_at = NOW()
+      WHERE id = :id`,
+      {
+        id: payload.id,
+        name: payload.name,
+        handle: payload.handle,
+        avatar: payload.avatar,
+        banner: payload.banner,
+        description: payload.description,
+        subscriberCount: payload.subscriberCount,
+        totalViews: payload.totalViews,
+        totalWatchHours: payload.totalWatchHours,
+        verified: payload.verified ? 1 : 0,
+        monetization,
+      }
+    );
+    const [rows] = await pool.query<ChannelRow[]>(
+      "SELECT * FROM channels WHERE id = :id LIMIT 1",
+      { id: payload.id }
+    );
+    if (rows.length === 0) {
+      throw new Error("Failed to update channel");
+    }
+    return mapChannelRow(rows[0]);
+  }
+  const id = crypto.randomUUID();
+  await pool.execute(
+    `INSERT INTO channels (
+      id,
+      user_id,
+      name,
+      handle,
+      avatar,
+      banner,
+      description,
+      subscriber_count,
+      total_views,
+      total_watch_hours,
+      verified,
+      monetization
+    ) VALUES (
+      :id,
+      :userId,
+      :name,
+      :handle,
+      :avatar,
+      :banner,
+      :description,
+      :subscriberCount,
+      :totalViews,
+      :totalWatchHours,
+      :verified,
+      :monetization
+    )`,
+    {
+      id,
+      userId,
       name: payload.name,
       handle: payload.handle,
-      avatar: payload.avatar ?? db.channels[index].avatar,
-      banner: payload.banner ?? db.channels[index].banner,
+      avatar: payload.avatar,
+      banner: payload.banner,
       description: payload.description,
-      updatedAt: now,
-    };
-
-    db.channels[index] = updated;
-    writeDb(db);
-    return updated;
+      subscriberCount: payload.subscriberCount,
+      totalViews: payload.totalViews,
+      totalWatchHours: payload.totalWatchHours,
+      verified: payload.verified ? 1 : 0,
+      monetization,
+    }
+  );
+  await pool.execute("UPDATE users SET channel_id = :channelId WHERE id = :userId", { channelId: id, userId });
+  const [rows] = await pool.query<ChannelRow[]>(
+    "SELECT * FROM channels WHERE id = :id LIMIT 1",
+    { id }
+  );
+  if (rows.length === 0) {
+    throw new Error("Failed to create channel");
   }
-
-  const channel: StoredChannel = {
-    id: `channel-${crypto.randomUUID()}`,
-    userId,
-    name: payload.name,
-    handle: payload.handle,
-    avatar: payload.avatar ?? null,
-    banner: payload.banner ?? null,
-    description: payload.description,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  db.channels.push(channel);
-
-  const userIndex = db.users.findIndex((user) => user.id === userId);
-  if (userIndex !== -1) {
-    db.users[userIndex] = {
-      ...db.users[userIndex],
-      channelId: channel.id,
-      updatedAt: now,
-    };
-  }
-
-  writeDb(db);
-  return channel;
+  return mapChannelRow(rows[0]);
 };
 
-export const listUsers = (): StoredUser[] => {
-  const db = readDb();
-  return db.users;
+export const listUsers = async (): Promise<StoredUser[]> => {
+  const pool = getPool();
+  const [rows] = await pool.query<UserRow[]>("SELECT * FROM users ORDER BY created_at DESC");
+  return rows.map(mapUserRow);
 };
 
-export const deleteUserById = (userId: string): void => {
-  const db = readDb();
-  const target = db.users.find((user) => user.id === userId);
-
-  if (!target) {
+export const deleteUserById = async (userId: string): Promise<void> => {
+  const pool = getPool();
+  const existing = await findUserById(userId);
+  if (!existing) {
     throw new Error("User not found");
   }
-
-  if (target.role === "superadmin") {
+  if ((existing.role as string).toLowerCase() === "superadmin") {
     throw new Error("Cannot delete super admin");
   }
-
-  db.sessions = db.sessions.filter((session) => session.userId !== userId);
-  db.users = db.users.filter((user) => user.id !== userId);
-  db.channels = db.channels.filter((channel) => channel.userId !== userId);
-  writeDb(db);
+  await pool.execute("DELETE FROM users WHERE id = :id", { id: userId });
 };
-
-export type { StoredUser, StoredSession, StoredRole, StoredChannel, DatabaseShape };

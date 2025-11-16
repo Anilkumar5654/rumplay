@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { protectedProcedure } from "../../../create-context";
 import { findUserById, updateUser, verifyPassword } from "../../../../utils/database";
+import type { StoredUser } from "../../../../utils/database";
 
-const sanitizeUser = (user: ReturnType<typeof findUserById>) => {
+const sanitizeUser = (user: StoredUser | null) => {
   if (!user) {
     return null;
   }
@@ -48,14 +49,14 @@ export const updateProfileProcedure = protectedProcedure
       currentPassword: z.string().optional(),
     })
   )
-  .mutation(({ input, ctx }) => {
+  .mutation(async ({ input, ctx }) => {
     const targetUserId = input.userId ?? ctx.user?.id;
 
     if (!targetUserId) {
       throw new Error("Missing user target");
     }
 
-    const targetUser = findUserById(targetUserId);
+    const targetUser = await findUserById(targetUserId);
 
     if (!targetUser) {
       throw new Error("User not found");
@@ -80,7 +81,7 @@ export const updateProfileProcedure = protectedProcedure
       }
     }
 
-    const updated = updateUser(targetUserId, {
+    const updated = await updateUser(targetUserId, {
       username: input.username ?? targetUser.username,
       displayName: input.displayName ?? targetUser.displayName,
       email: input.email ?? targetUser.email,
@@ -102,14 +103,14 @@ export const getUserProfileProcedure = protectedProcedure
       userId: z.string().optional(),
     })
   )
-  .query(({ input, ctx }) => {
+  .query(async ({ input, ctx }) => {
     const targetUserId = input.userId ?? ctx.user?.id;
 
     if (!targetUserId) {
       throw new Error("Missing user target");
     }
 
-    const user = findUserById(targetUserId);
+    const user = await findUserById(targetUserId);
 
     if (!user) {
       throw new Error("User not found");

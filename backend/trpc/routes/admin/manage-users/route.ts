@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { adminProcedure, superAdminProcedure } from "../../../create-context";
 import { deleteUserById, listUsers, updateUser } from "../../../../utils/database";
+import type { StoredUser } from "../../../../utils/database";
 
-const sanitizeUser = (user: ReturnType<typeof listUsers>[number]) => ({
+const sanitizeUser = (user: StoredUser) => ({
   id: user.id,
   email: user.email,
   username: user.username,
@@ -17,8 +18,8 @@ const sanitizeUser = (user: ReturnType<typeof listUsers>[number]) => ({
 
 export const getAllUsersProcedure = adminProcedure
   .input(z.void())
-  .query(({ ctx }) => {
-    const users = listUsers();
+  .query(async ({ ctx }) => {
+    const users = await listUsers();
 
     return {
       success: true,
@@ -34,12 +35,12 @@ export const updateUserRoleProcedure = superAdminProcedure
       newRole: z.enum(["user", "creator", "admin", "superadmin"]),
     })
   )
-  .mutation(({ input, ctx }) => {
+  .mutation(async ({ input, ctx }) => {
     if (ctx.user?.id === input.targetUserId) {
       throw new Error("Super admin cannot change their own role");
     }
 
-    const updated = updateUser(input.targetUserId, {
+    const updated = await updateUser(input.targetUserId, {
       role: input.newRole,
       rolesAssignedBy: ctx.user?.id,
     });
@@ -56,12 +57,12 @@ export const deleteUserProcedure = adminProcedure
       targetUserId: z.string(),
     })
   )
-  .mutation(({ input, ctx }) => {
+  .mutation(async ({ input, ctx }) => {
     if (ctx.user?.role !== "superadmin" && ctx.user?.id === input.targetUserId) {
       throw new Error("Cannot delete your own account");
     }
 
-    deleteUserById(input.targetUserId);
+    await deleteUserById(input.targetUserId);
 
     return {
       success: true,
