@@ -1,8 +1,10 @@
-# Frontend API Base URL
-EXPO_PUBLIC_API_URL="https://moviedbr.com"
+# Frontend API Base URL (Your backend server URL - for local development use the dev server)
+EXPO_PUBLIC_API_URL="http://localhost:8081"
 
 # Backend Database Configuration (Hostinger MySQL)
-DB_HOST="localhost"
+# IMPORTANT: Use the remote MySQL hostname provided by Hostinger, NOT localhost
+# You need to enable remote MySQL access in Hostinger cPanel
+DB_HOST="srv1616.hstgr.io"
 DB_USER="u449340066_rumplay"
 DB_PASSWORD="6>E/UCiT;AYh"
 DB_NAME="u449340066_rumplay"
