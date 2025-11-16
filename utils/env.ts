@@ -6,13 +6,10 @@ export const getEnvApiBaseUrl = (): string => {
   if (cachedBaseUrl) {
     return cachedBaseUrl;
   }
-  const raw = process.env.EXPO_PUBLIC_API_URL;
-  if (!raw || raw.trim().length === 0) {
-    throw new Error("Backend URL not configured");
-  }
+  const raw = process.env.EXPO_PUBLIC_API_URL || "https://moviedbr.com";
   const normalized = normalizeBaseUrl(raw);
   if (!/^https?:\/\//i.test(normalized)) {
-    throw new Error("Backend URL not configured");
+    throw new Error("Backend URL must start with http:// or https://");
   }
   cachedBaseUrl = normalized;
   return cachedBaseUrl;
