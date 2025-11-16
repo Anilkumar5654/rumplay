@@ -15,12 +15,13 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import type { ImagePickerAsset } from "expo-image-picker";
 import * as VideoThumbnails from "expo-video-thumbnails";
-import * as FileSystem from "expo-file-system";
 import { X, Video as VideoIcon, Camera, Image as ImageIcon, Calendar } from "lucide-react-native";
 import { theme } from "../constants/theme";
 import { useAppState } from "../contexts/AppStateContext";
+import { useAuth } from "../contexts/AuthContext";
 import { Video, VideoUploadData, UploadProgress, UploadFolder } from "../types";
 import { getEnvApiBaseUrl, getEnvUploadEndpoint } from "../utils/env";
+import { readFileAsBase64, uploadMediaFile } from "../utils/uploadHelpers";
 
 const CATEGORIES = [
   "Technology",
@@ -52,6 +53,7 @@ const LOG_PREFIX = "[UploadModal]";
 
 export default function UploadModal({ visible, onClose, onUploadComplete }: { visible: boolean; onClose: () => void; onUploadComplete?: () => void }) {
   const { addVideo, currentUser, getChannelById } = useAppState();
+  const { authToken } = useAuth();
 
   let apiBase: string = "";
   let uploadEndpoint: string = "";
@@ -136,63 +138,31 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
     return ensureMeta(null, uri, "thumbnail", "jpg");
   };
 
-  const readFileAsBase64 = async (uri: string): Promise<string> => {
-    if (Platform.OS === "web") {
-      const response = await fetch(uri);
-      if (!response.ok) {
-        throw new Error("Unable to access file data");
-      }
-      const blob = await response.blob();
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result;
-          if (typeof result === "string") {
-            const base64String = result.split(",").pop();
-            if (base64String) {
-              resolve(base64String);
-              return;
-            }
-          }
-          reject(new Error("Failed to process file"));
-        };
-        reader.onerror = () => {
-          reject(new Error("Failed to process file"));
-        };
-        reader.readAsDataURL(blob);
-      });
-    }
-    return FileSystem.readAsStringAsync(uri, { encoding: "base64" as FileSystem.EncodingType });
-  };
+
 
   const uploadMediaAsset = async (folder: UploadFolder, meta: MediaMeta) => {
     if (!uploadEndpoint) {
       throw new Error("Backend URL not configured");
     }
+    if (!authToken) {
+      throw new Error("Not authenticated");
+    }
     console.log(`${LOG_PREFIX} Uploading asset`, { folder, name: meta.name });
-    const base64 = await readFileAsBase64(meta.uri);
-    const response = await fetch(uploadEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fileName: meta.name,
-        fileData: `data:${meta.mimeType};base64,${base64}`,
-        folder,
-        mimeType: meta.mimeType,
-      }),
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.success) {
-      const message = payload?.error ?? "Upload failed";
-      console.error(`${LOG_PREFIX} Upload failed`, { folder, message, status: response.status });
+    
+    const result = await uploadMediaFile(meta.uri, meta.name, folder, authToken);
+    
+    if (!result.success || !result.url) {
+      const message = result.error ?? "Upload failed";
+      console.error(`${LOG_PREFIX} Upload failed`, { folder, message });
       throw new Error(message);
     }
+    
     return {
-      url: payload.url as string,
-      path: payload.path as string,
-      filename: payload.filename as string,
-      mimeType: payload.mimeType as string,
-      size: payload.size as number,
+      url: result.url,
+      path: result.path ?? "",
+      filename: result.filename ?? meta.name,
+      mimeType: meta.mimeType,
+      size: 0,
     };
   };
 
