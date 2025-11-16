@@ -6,7 +6,9 @@ import { z } from "zod";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { ensureUploadDirs, resolveUploadPath, UploadFolder } from "./utils/ensureUploadDirs";
-import { createSession, createUser, findSession, findUserByEmail, findUserById, revokeSession, verifyPassword } from "./utils/database";
+import type { Context } from "hono";
+import { createSession, createUser, findSession, findUserByEmail, findUserById, revokeSession, verifyPassword, ensureChannelForUser, insertShortRecord, insertVideoRecord } from "./utils/database";
+import type { StoredUser } from "./utils/database";
 import { sanitizeUser } from "./utils/auth-helpers";
 import { SUPER_ADMIN_EMAIL } from "./constants/auth";
 
@@ -173,6 +175,139 @@ const formatLimit = (bytes: number): string => {
   return `${Math.round(kb)}KB`;
 };
 
+type AuthResult =
+  | { ok: true; user: StoredUser }
+  | { ok: false; status: number; message: string };
+
+const authenticateRequest = async (c: Context): Promise<AuthResult> => {
+  const token = normalizeToken(c.req.header("authorization") ?? null);
+  if (!token) {
+    return { ok: false, status: 401, message: "Missing token" };
+  }
+  const session = await findSession(token);
+  if (!session) {
+    return { ok: false, status: 401, message: "Invalid session" };
+  }
+  const user = await findUserById(session.userId);
+  if (!user) {
+    await revokeSession(token);
+    return { ok: false, status: 401, message: "User not found" };
+  }
+  return { ok: true, user };
+};
+
+const resolveStringInput = (input: unknown): string => {
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      if (typeof item === "string" && item.trim().length > 0) {
+        return item;
+      }
+    }
+    const first = input.find((item) => typeof item === "string");
+    if (typeof first === "string") {
+      return first;
+    }
+    return "";
+  }
+  if (typeof input === "string") {
+    return input;
+  }
+  if (typeof input === "number" || typeof input === "boolean") {
+    return String(input);
+  }
+  return "";
+};
+
+const parseTagsInput = (input: unknown): string[] => {
+  if (!input) {
+    return [];
+  }
+  if (Array.isArray(input)) {
+    const collected: string[] = [];
+    input.forEach((value) => {
+      if (typeof value === "string") {
+        value.split(",").forEach((segment) => {
+          const tag = segment.trim();
+          if (tag.length > 0) {
+            collected.push(tag);
+          }
+        });
+      }
+    });
+    return collected.filter((tag, index) => collected.indexOf(tag) === index);
+  }
+  if (typeof input === "string") {
+    return input
+      .split(",")
+      .map((segment) => segment.trim())
+      .filter((segment, index, array) => segment.length > 0 && array.indexOf(segment) === index);
+  }
+  return [];
+};
+
+const extractFileEntry = (input: unknown): FileLike | null => {
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      if (isFileLike(item)) {
+        return item;
+      }
+    }
+    return null;
+  }
+  if (isFileLike(input)) {
+    return input;
+  }
+  return null;
+};
+
+const guessExtension = (file: FileLike, fallback: string): string => {
+  const fromName = file.name ? resolveExtension(file.name) : "";
+  if (fromName.length > 0) {
+    return fromName;
+  }
+  const mime = typeof file.type === "string" && file.type.length > 0 ? normalizeMimeType(file.type) : "";
+  if (mime.length > 0) {
+    const matched = Object.entries(fallbackMimeByExtension).find(([, value]) => normalizeMimeType(value) === mime);
+    if (matched) {
+      return matched[0];
+    }
+  }
+  return fallback;
+};
+
+const sanitizeNameSegment = (value: string): string => {
+  const trimmed = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const cleaned = trimmed.replace(/^-+/, "").replace(/-+$/, "");
+  return cleaned.length > 0 ? cleaned : "file";
+};
+
+const ensureFilenameHasExtension = (name: string, extension: string): string => {
+  if (resolveExtension(name).length > 0) {
+    return name;
+  }
+  return `${name}.${extension}`;
+};
+
+const persistMultipartEntry = async (
+  folder: UploadFolder,
+  file: FileLike,
+  prefix: string,
+  fallbackExtension: string
+): Promise<PersistResult> => {
+  const extension = guessExtension(file, fallbackExtension);
+  const fallbackName = `${sanitizeNameSegment(prefix)}-${Date.now()}`;
+  const rawName = file.name && file.name.trim().length > 0 ? file.name.trim() : fallbackName;
+  const finalName = ensureFilenameHasExtension(rawName, extension);
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const candidateMime = typeof file.type === "string" && file.type.length > 0
+    ? normalizeMimeType(file.type)
+    : resolveMimeFromExtension(resolveExtension(finalName));
+  return persistUpload(folder, finalName, buffer, candidateMime);
+};
+
+const defaultThumbnailUrl = publicBaseUrl ? `${publicBaseUrl}/uploads/thumbnails/default.jpg` : "/uploads/thumbnails/default.jpg";
+
 const persistUpload = (folder: UploadFolder, originalFileName: string, buffer: Buffer, mimeType: string): PersistResult => {
   const config = folderConfigs[folder] ?? folderConfigs.profiles;
   const extension = resolveExtension(originalFileName);
@@ -287,7 +422,7 @@ app.get("/uploads/*", (c) => {
   });
 });
 
-app.post("/api/uploads", async (c) => {
+const handleGenericUpload = async (c: Context) => {
   const contentType = c.req.header("content-type") ?? "";
   console.log("[Uploads] Incoming request", { contentType });
 
@@ -395,6 +530,145 @@ app.post("/api/uploads", async (c) => {
     console.error("[Uploads] Unexpected error", error);
     return c.json({ success: false, error: "Unable to process upload" }, 500);
   }
+};
+
+app.post("/api/uploads", handleGenericUpload);
+app.post("/api/upload", handleGenericUpload);
+
+app.post("/api/video/upload", async (c) => {
+  const contentType = c.req.header("content-type") ?? "";
+  console.log("[VideoUpload] Incoming request", { contentType });
+  if (!contentType.includes("multipart/form-data")) {
+    return c.json({ success: false, error: "Multipart form-data required" }, 400);
+  }
+  const auth = await authenticateRequest(c);
+  if (!auth.ok) {
+    console.warn("[VideoUpload] Auth failed", { status: auth.status, message: auth.message });
+    return c.json({ success: false, error: auth.message }, auth.status);
+  }
+  const user = auth.user;
+  const rawBody = (await c.req.parseBody()) as Record<string, unknown>;
+  const title = resolveStringInput(rawBody.title).trim();
+  if (title.length === 0) {
+    return c.json({ success: false, error: "Title is required" }, 400);
+  }
+  const description = resolveStringInput(rawBody.description).trim();
+  const categoryInput = resolveStringInput(rawBody.category).trim();
+  const category = categoryInput.length > 0 ? categoryInput : "General";
+  const visibilityInput = resolveStringInput(rawBody.visibility).trim().toLowerCase();
+  const allowedVisibility = new Set(["public", "private", "unlisted", "scheduled"]);
+  const visibility = allowedVisibility.has(visibilityInput as string)
+    ? (visibilityInput as "public" | "private" | "unlisted" | "scheduled")
+    : "public";
+  const tagsSource = rawBody["tags[]"] ?? (rawBody as Record<string, unknown>).tags;
+  const tags = parseTagsInput(tagsSource);
+  const videoFile = extractFileEntry(rawBody.file);
+  if (!videoFile) {
+    console.error("[VideoUpload] Missing video file", { keys: Object.keys(rawBody) });
+    return c.json({ success: false, error: "Video file is required" }, 400);
+  }
+  const videoPersist = await persistMultipartEntry("videos", videoFile, title, "mp4");
+  if (!videoPersist.ok) {
+    console.error("[VideoUpload] Video persist failed", { status: videoPersist.status, message: videoPersist.message });
+    return c.json({ success: false, error: videoPersist.message }, videoPersist.status);
+  }
+  const thumbnailFile = extractFileEntry(rawBody.thumbnail);
+  let thumbnailUrl = defaultThumbnailUrl;
+  if (thumbnailFile) {
+    const thumbnailPersist = await persistMultipartEntry("thumbnails", thumbnailFile, `${title}-thumbnail`, "jpg");
+    if (!thumbnailPersist.ok) {
+      console.error("[VideoUpload] Thumbnail persist failed", { status: thumbnailPersist.status, message: thumbnailPersist.message });
+      return c.json({ success: false, error: thumbnailPersist.message }, thumbnailPersist.status);
+    }
+    thumbnailUrl = thumbnailPersist.data.url;
+  }
+  const channel = await ensureChannelForUser(user);
+  const videoUrl = videoPersist.data.url;
+  const videoId = await insertVideoRecord({
+    userId: user.id,
+    channelId: channel.id,
+    title,
+    description,
+    videoUrl,
+    thumbnail: thumbnailUrl,
+    privacy: visibility,
+    category,
+    tags,
+    isShort: false,
+  });
+  console.log("[VideoUpload] Video stored", { userId: user.id, videoId, category, visibility });
+  return c.json({
+    success: true,
+    message: "Video uploaded successfully",
+    video: {
+      id: videoId,
+      title,
+      video_url: videoUrl,
+      thumbnail: thumbnailUrl,
+      category,
+      visibility,
+      tags,
+      description,
+    },
+    file_url: videoUrl,
+  });
+});
+
+app.post("/api/shorts/upload", async (c) => {
+  const contentType = c.req.header("content-type") ?? "";
+  console.log("[ShortUpload] Incoming request", { contentType });
+  if (!contentType.includes("multipart/form-data")) {
+    return c.json({ success: false, error: "Multipart form-data required" }, 400);
+  }
+  const auth = await authenticateRequest(c);
+  if (!auth.ok) {
+    console.warn("[ShortUpload] Auth failed", { status: auth.status, message: auth.message });
+    return c.json({ success: false, error: auth.message }, auth.status);
+  }
+  const user = auth.user;
+  const rawBody = (await c.req.parseBody()) as Record<string, unknown>;
+  const description = resolveStringInput(rawBody.description).trim();
+  const shortFile = extractFileEntry(rawBody.file);
+  if (!shortFile) {
+    console.error("[ShortUpload] Missing video file", { keys: Object.keys(rawBody) });
+    return c.json({ success: false, error: "Short video file is required" }, 400);
+  }
+  const shortPersist = await persistMultipartEntry("shorts", shortFile, description.length > 0 ? description : "short", "mp4");
+  if (!shortPersist.ok) {
+    console.error("[ShortUpload] Persist failed", { status: shortPersist.status, message: shortPersist.message });
+    return c.json({ success: false, error: shortPersist.message }, shortPersist.status);
+  }
+  const thumbnailFile = extractFileEntry(rawBody.thumbnail);
+  let thumbnailUrl = defaultThumbnailUrl;
+  if (thumbnailFile) {
+    const thumbnailPersist = await persistMultipartEntry("thumbnails", thumbnailFile, `${description || "short"}-thumbnail`, "jpg");
+    if (!thumbnailPersist.ok) {
+      console.error("[ShortUpload] Thumbnail persist failed", { status: thumbnailPersist.status, message: thumbnailPersist.message });
+      return c.json({ success: false, error: thumbnailPersist.message }, thumbnailPersist.status);
+    }
+    thumbnailUrl = thumbnailPersist.data.url;
+  }
+  const channel = await ensureChannelForUser(user);
+  const shortUrl = shortPersist.data.url;
+  const shortId = await insertShortRecord({
+    userId: user.id,
+    channelId: channel.id,
+    shortUrl,
+    thumbnail: thumbnailUrl,
+    description,
+  });
+  console.log("[ShortUpload] Short stored", { userId: user.id, shortId });
+  return c.json({
+    success: true,
+    message: "Short uploaded successfully",
+    short: {
+      id: shortId,
+      short_url: shortUrl,
+      thumbnail: thumbnailUrl,
+      description,
+    },
+    file_url: shortUrl,
+  });
 });
 
 app.post("/api/auth/login", async (c) => {

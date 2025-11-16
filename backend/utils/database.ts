@@ -654,3 +654,202 @@ export const deleteUserById = async (userId: string): Promise<void> => {
   }
   await pool.execute("DELETE FROM users WHERE id = :id", { id: userId });
 };
+
+type VideoInsertPayload = {
+  userId: string;
+  channelId: string;
+  title: string;
+  description: string;
+  videoUrl: string;
+  thumbnail: string;
+  privacy: "public" | "private" | "unlisted" | "scheduled";
+  category: string;
+  tags: string[];
+  isShort: boolean;
+  duration?: number;
+  scheduledDate?: string | null;
+};
+
+type ShortInsertPayload = {
+  userId: string;
+  channelId: string;
+  shortUrl: string;
+  thumbnail: string;
+  description: string;
+};
+
+export const findChannelByUserId = async (userId: string): Promise<StoredChannel | null> => {
+  const pool = getPool();
+  const [rows] = await pool.query<ChannelRow[]>(
+    "SELECT * FROM channels WHERE user_id = :userId LIMIT 1",
+    { userId }
+  );
+  if (rows.length === 0) {
+    return null;
+  }
+  return mapChannelRow(rows[0]);
+};
+
+export const ensureChannelForUser = async (user: StoredUser): Promise<StoredChannel> => {
+  const existing = await findChannelByUserId(user.id);
+  if (existing) {
+    return existing;
+  }
+  const pool = getPool();
+  const monetization = JSON.stringify(defaultMonetization);
+  const displayName = user.displayName ?? user.username;
+  const baseHandle = user.username.startsWith("@") ? user.username : `@${user.username}`;
+  let attempt = 0;
+  while (attempt < 10) {
+    const handleCandidate = attempt === 0 ? baseHandle : `${baseHandle}${attempt}`;
+    const id = crypto.randomUUID();
+    try {
+      await pool.execute(
+        `INSERT INTO channels (
+          id,
+          user_id,
+          name,
+          handle,
+          avatar,
+          banner,
+          description,
+          subscriber_count,
+          total_views,
+          total_watch_hours,
+          verified,
+          monetization
+        ) VALUES (
+          :id,
+          :userId,
+          :name,
+          :handle,
+          :avatar,
+          :banner,
+          :description,
+          0,
+          0,
+          0,
+          0,
+          :monetization
+        )`,
+        {
+          id,
+          userId: user.id,
+          name: `${displayName}'s Channel`,
+          handle: handleCandidate,
+          avatar: user.avatar,
+          banner: null,
+          description: user.bio && user.bio.length > 0 ? user.bio : "Welcome to my channel",
+          monetization,
+        }
+      );
+      await pool.execute("UPDATE users SET channel_id = :channelId WHERE id = :userId", {
+        channelId: id,
+        userId: user.id,
+      });
+      const [rows] = await pool.query<ChannelRow[]>(
+        "SELECT * FROM channels WHERE id = :id LIMIT 1",
+        { id }
+      );
+      if (rows.length === 0) {
+        throw new Error("Channel creation failed");
+      }
+      return mapChannelRow(rows[0]);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        (error as { code: string }).code === "ER_DUP_ENTRY"
+      ) {
+        attempt += 1;
+        continue;
+      }
+      console.error("[DB] ensureChannelForUser error", error);
+      throw error instanceof Error ? error : new Error("Unable to create channel");
+    }
+  }
+  throw new Error("Unable to allocate unique channel handle");
+};
+
+export const insertVideoRecord = async (payload: VideoInsertPayload): Promise<string> => {
+  const pool = getPool();
+  const id = crypto.randomUUID();
+  await pool.execute(
+    `INSERT INTO videos (
+      id,
+      user_id,
+      channel_id,
+      title,
+      description,
+      video_url,
+      thumbnail,
+      privacy,
+      category,
+      tags,
+      is_short,
+      duration,
+      scheduled_date
+    ) VALUES (
+      :id,
+      :userId,
+      :channelId,
+      :title,
+      :description,
+      :videoUrl,
+      :thumbnail,
+      :privacy,
+      :category,
+      :tags,
+      :isShort,
+      :duration,
+      :scheduledDate
+    )`,
+    {
+      id,
+      userId: payload.userId,
+      channelId: payload.channelId,
+      title: payload.title,
+      description: payload.description,
+      videoUrl: payload.videoUrl,
+      thumbnail: payload.thumbnail,
+      privacy: payload.privacy,
+      category: payload.category,
+      tags: JSON.stringify(payload.tags),
+      isShort: payload.isShort ? 1 : 0,
+      duration: payload.duration ?? 0,
+      scheduledDate: payload.scheduledDate ?? null,
+    }
+  );
+  return id;
+};
+
+export const insertShortRecord = async (payload: ShortInsertPayload): Promise<string> => {
+  const pool = getPool();
+  const id = crypto.randomUUID();
+  await pool.execute(
+    `INSERT INTO shorts (
+      id,
+      user_id,
+      channel_id,
+      short_url,
+      thumbnail,
+      description
+    ) VALUES (
+      :id,
+      :userId,
+      :channelId,
+      :shortUrl,
+      :thumbnail,
+      :description
+    )`,
+    {
+      id,
+      userId: payload.userId,
+      channelId: payload.channelId,
+      shortUrl: payload.shortUrl,
+      thumbnail: payload.thumbnail,
+      description: payload.description,
+    }
+  );
+  return id;
+};
