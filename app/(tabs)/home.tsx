@@ -14,11 +14,13 @@ import { Search, Mic, Plus } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UploadModal from "../../components/UploadModal";
+import ContinueWatchingSection from "../../components/ContinueWatchingSection";
 import { theme } from "../../constants/theme";
 import { useAppState } from "../../contexts/AppStateContext";
 import { categories } from "../../mocks/data";
 import { Video } from "../../types";
 import { useRequireAuth } from "../../hooks/useRequireAuth";
+import { RecommendationEngine } from "../../utils/recommendationEngine";
 
 const { width } = Dimensions.get("window");
 
@@ -26,7 +28,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const requireAuth = useRequireAuth();
-  const { videos } = useAppState();
+  const { videos, currentUser } = useAppState();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,7 +62,12 @@ export default function HomeScreen() {
       ? regularVideos
       : regularVideos.filter((video) => video.category === selectedCategory);
 
-  const recommendedVideos = filteredVideos;
+  const recommendedVideos = RecommendationEngine.getRecommendations(
+    filteredVideos,
+    currentUser,
+    [],
+    20
+  );
 
   const formatViews = (views: number): string => {
     if (views >= 1000000) {
@@ -212,6 +219,8 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         </View>
+
+        <ContinueWatchingSection />
 
         {shorts.length > 0 && (
           <View style={styles.section}>

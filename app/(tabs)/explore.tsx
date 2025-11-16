@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,38 +6,45 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  TextInput,
   Dimensions,
   RefreshControl,
-} from "react-native";
-import { Search, TrendingUp, Film, Music, Trophy, Book } from "lucide-react-native";
-import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { theme } from "@/constants/theme";
-import { useAppState } from "@/contexts/AppStateContext";
-import { Video } from "@/types";
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Radio, Eye } from 'lucide-react-native';
+import { theme } from '../../constants/theme';
+import { useAppState } from '../../contexts/AppStateContext';
+import { Video } from '../../types';
 
-const { width } = Dimensions.get("window");
-
-const exploreCategories = [
-  { id: "trending", title: "Trending", icon: TrendingUp, color: "#FF2D95" },
-  { id: "music", title: "Music", icon: Music, color: "#FF6B6B" },
-  { id: "gaming", title: "Gaming", icon: Trophy, color: "#4ECDC4" },
-  { id: "education", title: "Education", icon: Book, color: "#95E1D3" },
-  { id: "entertainment", title: "Entertainment", icon: Film, color: "#FFE66D" },
-];
+const { width } = Dimensions.get('window');
 
 export default function ExploreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { videos } = useAppState();
-  const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'trending' | 'live' | 'categories'>('trending');
 
+  const liveVideos = videos.filter(v => v.isLive);
   const trendingVideos = [...videos]
-    .filter((v) => !v.isShort)
+    .filter(v => !v.isShort && !v.isLive)
     .sort((a, b) => b.views - a.views)
-    .slice(0, 10);
+    .slice(0, 20);
+
+  const categoriesData = [
+    { id: 'gaming', name: 'Gaming', icon: '🎮', color: '#9146FF' },
+    { id: 'music', name: 'Music', icon: '🎵', color: '#FF0050' },
+    { id: 'sports', name: 'Sports', icon: '⚽', color: '#00B894' },
+    { id: 'technology', name: 'Tech', icon: '💻', color: '#0984E3' },
+    { id: 'education', name: 'Education', icon: '📚', color: '#FDCB6E' },
+    { id: 'entertainment', name: 'Entertainment', icon: '🎬', color: '#E17055' },
+  ];
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setRefreshing(false);
+  };
 
   const formatViews = (views: number): string => {
     if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
@@ -45,90 +52,140 @@ export default function ExploreScreen() {
     return views.toString();
   };
 
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setRefreshing(false);
-  };
-
-  const renderVideoItem = (item: Video) => (
+  const renderLiveCard = (video: Video) => (
     <TouchableOpacity
-      key={item.id}
-      style={styles.videoCard}
-      onPress={() => router.push(`/video/${item.id}`)}
+      key={video.id}
+      style={styles.liveCard}
+      onPress={() => router.push(`/video/${video.id}`)}
     >
-      <View style={styles.thumbnailContainer}>
-        <Image source={{ uri: item.thumbnail }} style={styles.videoThumbnail} />
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{formatDuration(item.duration)}</Text>
+      <View style={styles.liveThumbnailContainer}>
+        <Image source={{ uri: video.thumbnail }} style={styles.liveThumbnail} />
+        <View style={styles.liveBadge}>
+          <Radio color="#FFFFFF" size={12} fill="#FFFFFF" />
+          <Text style={styles.liveBadgeText}>LIVE</Text>
+        </View>
+        <View style={styles.viewersBadge}>
+          <Eye color="#FFFFFF" size={12} />
+          <Text style={styles.viewersText}>{formatViews(video.views)}</Text>
         </View>
       </View>
-      <View style={styles.videoInfo}>
-        <Image source={{ uri: item.channelAvatar }} style={styles.channelAvatar} />
-        <View style={styles.videoMeta}>
-          <Text style={styles.videoTitle} numberOfLines={2}>
-            {item.title}
+      <View style={styles.liveInfo}>
+        <Image source={{ uri: video.channelAvatar }} style={styles.liveChannelAvatar} />
+        <View style={styles.liveMeta}>
+          <Text style={styles.liveTitle} numberOfLines={2}>
+            {video.title}
           </Text>
-          <Text style={styles.videoStats}>
-            {item.channelName} • {formatViews(item.views)} views
-          </Text>
+          <Text style={styles.liveChannelName}>{video.channelName}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 
+  const renderTrendingCard = (video: Video, index: number) => (
+    <TouchableOpacity
+      key={video.id}
+      style={styles.trendingCard}
+      onPress={() => router.push(`/video/${video.id}`)}
+    >
+      <View style={styles.rankBadge}>
+        <Text style={styles.rankText}>#{index + 1}</Text>
+      </View>
+      <Image source={{ uri: video.thumbnail }} style={styles.trendingThumbnail} />
+      <View style={styles.trendingInfo}>
+        <Text style={styles.trendingTitle} numberOfLines={2}>
+          {video.title}
+        </Text>
+        <Text style={styles.trendingChannel}>{video.channelName}</Text>
+        <View style={styles.trendingStats}>
+          <Eye color={theme.colors.textSecondary} size={14} />
+          <Text style={styles.trendingViewsText}>{formatViews(video.views)} views</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderCategoryCard = (category: typeof categoriesData[0]) => (
+    <TouchableOpacity
+      key={category.id}
+      style={[styles.categoryCard, { backgroundColor: category.color }]}
+      onPress={() => router.push(`/search?category=${category.id}`)}
+    >
+      <Text style={styles.categoryIcon}>{category.icon}</Text>
+      <Text style={styles.categoryName}>{category.name}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
         <Text style={styles.headerTitle}>Explore</Text>
-        <View style={styles.searchContainer}>
-          <Search color={theme.colors.textSecondary} size={20} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search videos, channels..."
-            placeholderTextColor={theme.colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'trending' && styles.tabActive]}
+            onPress={() => setActiveTab('trending')}
+          >
+            <Text style={[styles.tabText, activeTab === 'trending' && styles.tabTextActive]}>
+              Trending
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'live' && styles.tabActive]}
+            onPress={() => setActiveTab('live')}
+          >
+            <Text style={[styles.tabText, activeTab === 'live' && styles.tabTextActive]}>
+              Live
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'categories' && styles.tabActive]}
+            onPress={() => setActiveTab('categories')}
+          >
+            <Text style={[styles.tabText, activeTab === 'categories' && styles.tabTextActive]}>
+              Categories
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={theme.colors.primary}
             colors={[theme.colors.primary]}
           />
         }
       >
-        <View style={styles.categoriesGrid}>
-          {exploreCategories.map((cat) => {
-            const Icon = cat.icon;
-            return (
-              <TouchableOpacity key={cat.id} style={styles.categoryCard}>
-                <View style={[styles.categoryIcon, { backgroundColor: cat.color }]}>
-                  <Icon color="#FFFFFF" size={32} />
-                </View>
-                <Text style={styles.categoryTitle}>{cat.title}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {activeTab === 'live' && (
+          <View style={styles.section}>
+            {liveVideos.length > 0 ? (
+              liveVideos.map(renderLiveCard)
+            ) : (
+              <View style={styles.emptyState}>
+                <Radio color={theme.colors.textSecondary} size={64} />
+                <Text style={styles.emptyStateTitle}>No Live Streams</Text>
+                <Text style={styles.emptyStateText}>
+                  Check back later for live content
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trending Now</Text>
-          {trendingVideos.map((video) => renderVideoItem(video))}
-        </View>
+        {activeTab === 'trending' && (
+          <View style={styles.section}>
+            {trendingVideos.map((video, index) => renderTrendingCard(video, index))}
+          </View>
+        )}
+
+        {activeTab === 'categories' && (
+          <View style={styles.categoriesGrid}>
+            {categoriesData.map(renderCategoryCard)}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -141,7 +198,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.xl,
     paddingBottom: theme.spacing.md,
     backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
@@ -149,114 +205,190 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: theme.fontSizes.xxl,
-    fontWeight: "bold" as const,
+    fontWeight: 'bold' as const,
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
   },
-  searchContainer: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+  tabs: {
+    flexDirection: 'row' as const,
     gap: theme.spacing.sm,
   },
-  searchInput: {
-    flex: 1,
+  tab: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+  },
+  tabActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  tabText: {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: '600' as const,
     color: theme.colors.text,
-    fontSize: theme.fontSizes.md,
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
   },
   content: {
     flex: 1,
   },
+  section: {
+    padding: theme.spacing.md,
+  },
+  liveCard: {
+    marginBottom: theme.spacing.lg,
+  },
+  liveThumbnailContainer: {
+    position: 'relative' as const,
+    width: '100%',
+    height: (width - theme.spacing.md * 2) * (9 / 16),
+    borderRadius: theme.radii.xl,
+    overflow: 'hidden' as const,
+  },
+  liveThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  liveBadge: {
+    position: 'absolute' as const,
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    backgroundColor: '#FF0000',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radii.sm,
+  },
+  liveBadgeText: {
+    color: '#FFFFFF',
+    fontSize: theme.fontSizes.xs,
+    fontWeight: 'bold' as const,
+  },
+  viewersBadge: {
+    position: 'absolute' as const,
+    bottom: theme.spacing.sm,
+    right: theme.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radii.sm,
+  },
+  viewersText: {
+    color: '#FFFFFF',
+    fontSize: theme.fontSizes.xs,
+    fontWeight: '600' as const,
+  },
+  liveInfo: {
+    flexDirection: 'row' as const,
+    marginTop: theme.spacing.sm,
+    gap: theme.spacing.sm,
+  },
+  liveChannelAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  liveMeta: {
+    flex: 1,
+  },
+  liveTitle: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: '600' as const,
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  liveChannelName: {
+    fontSize: theme.fontSizes.sm,
+    color: theme.colors.textSecondary,
+  },
+  trendingCard: {
+    flexDirection: 'row' as const,
+    marginBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+    position: 'relative' as const,
+  },
+  rankBadge: {
+    width: 32,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  rankText: {
+    fontSize: theme.fontSizes.lg,
+    fontWeight: 'bold' as const,
+    color: theme.colors.primary,
+  },
+  trendingThumbnail: {
+    width: 160,
+    height: 90,
+    borderRadius: theme.radii.lg,
+  },
+  trendingInfo: {
+    flex: 1,
+    justifyContent: 'center' as const,
+  },
+  trendingTitle: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: '600' as const,
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  trendingChannel: {
+    fontSize: theme.fontSizes.sm,
+    color: theme.colors.textSecondary,
+    marginBottom: 4,
+  },
+  trendingStats: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  trendingViewsText: {
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
+  },
   categoriesGrid: {
-    flexDirection: "row" as const,
-    flexWrap: "wrap" as const,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     padding: theme.spacing.md,
     gap: theme.spacing.md,
   },
   categoryCard: {
     width: (width - theme.spacing.md * 3) / 2,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
-    padding: theme.spacing.lg,
-    alignItems: "center" as const,
+    height: 120,
+    borderRadius: theme.radii.xl,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     gap: theme.spacing.sm,
   },
   categoryIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: theme.radii.lg,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
+    fontSize: 48,
   },
-  categoryTitle: {
-    color: theme.colors.text,
+  categoryName: {
     fontSize: theme.fontSizes.md,
-    fontWeight: "600" as const,
+    fontWeight: 'bold' as const,
+    color: '#FFFFFF',
   },
-  section: {
+  emptyState: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: theme.spacing.xxl * 2,
+  },
+  emptyStateTitle: {
+    fontSize: theme.fontSizes.xl,
+    fontWeight: 'bold' as const,
+    color: theme.colors.text,
     marginTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.sm,
   },
-  sectionTitle: {
-    fontSize: theme.fontSizes.lg,
-    fontWeight: "bold" as const,
-    color: theme.colors.text,
-    paddingHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  videoCard: {
-    marginBottom: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.md,
-  },
-  thumbnailContainer: {
-    position: "relative" as const,
-  },
-  videoThumbnail: {
-    width: "100%",
-    height: (width - theme.spacing.md * 2) * (9 / 16),
-    borderRadius: theme.radii.lg,
-    backgroundColor: theme.colors.surface,
-  },
-  durationBadge: {
-    position: "absolute" as const,
-    bottom: theme.spacing.sm,
-    right: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.sm,
-  },
-  durationText: {
-    color: "#FFFFFF",
-    fontSize: theme.fontSizes.xs,
-    fontWeight: "600" as const,
-  },
-  videoInfo: {
-    flexDirection: "row" as const,
-    marginTop: theme.spacing.sm,
-    gap: theme.spacing.sm,
-  },
-  channelAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surface,
-  },
-  videoMeta: {
-    flex: 1,
-  },
-  videoTitle: {
-    color: theme.colors.text,
+  emptyStateText: {
     fontSize: theme.fontSizes.md,
-    fontWeight: "600" as const,
-    lineHeight: 20,
-  },
-  videoStats: {
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSizes.xs,
-    marginTop: 4,
+    textAlign: 'center' as const,
   },
 });
