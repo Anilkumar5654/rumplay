@@ -21,7 +21,7 @@ import { useAppState } from "../contexts/AppStateContext";
 import { useAuth } from "../contexts/AuthContext";
 import { Video, VideoUploadData, UploadProgress, UploadFolder } from "../types";
 import { getEnvApiBaseUrl, getEnvUploadEndpoint } from "../utils/env";
-import { readFileAsBase64, uploadMediaFile } from "../utils/uploadHelpers";
+import { uploadMediaFile } from "../utils/uploadHelpers";
 
 const CATEGORIES = [
   "Technology",
