@@ -1,18 +1,17 @@
-import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import path from "path";
 import { Hono } from "hono";
 import { trpcServer } from "@hono/trpc-server";
 import { z } from "zod";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
-import { ensureUploadDirs, resolveUploadPath, UploadFolder } from "./utils/ensureUploadDirs";
+import { UploadFolder } from "./utils/ensureUploadDirs";
+import { uploadToHostinger } from "./utils/hostingerUpload";
 import type { Context } from "hono";
 import { createSession, createUser, findSession, findUserByEmail, findUserById, revokeSession, verifyPassword, ensureChannelForUser, insertShortRecord, insertVideoRecord } from "./utils/database";
 import type { StoredUser } from "./utils/database";
 import { sanitizeUser } from "./utils/auth-helpers";
 import { SUPER_ADMIN_EMAIL } from "./constants/auth";
-
-ensureUploadDirs();
 
 const app = new Hono();
 
@@ -308,7 +307,15 @@ const persistMultipartEntry = async (
 
 const defaultThumbnailUrl = publicBaseUrl ? `${publicBaseUrl}/uploads/thumbnails/default.jpg` : "/uploads/thumbnails/default.jpg";
 
-const persistUpload = (folder: UploadFolder, originalFileName: string, buffer: Buffer, mimeType: string): PersistResult => {
+const sanitizeFilename = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+};
+
+const persistUpload = async (folder: UploadFolder, originalFileName: string, buffer: Buffer, mimeType: string): Promise<PersistResult> => {
   const config = folderConfigs[folder] ?? folderConfigs.profiles;
   const extension = resolveExtension(originalFileName);
   const resolvedMime = mimeType ? normalizeMimeType(mimeType) : resolveMimeFromExtension(extension);
@@ -332,19 +339,22 @@ const persistUpload = (folder: UploadFolder, originalFileName: string, buffer: B
     return { ok: false, status: 400, message: `File exceeds ${formatLimit(config.maxBytes)} limit` };
   }
 
-  ensureUploadDirs();
+  const timestamp = Date.now();
+  const baseName = originalFileName.replace(/\.[^.]+$/, "");
+  const sanitized = sanitizeFilename(baseName);
+  const filename = `${sanitized}-${timestamp}.${extension}`;
 
-  const { absolutePath, relativePath, filename } = resolveUploadPath(folder, originalFileName);
+  console.log("[Uploads] Uploading to Hostinger", { folder, filename, size: buffer.length });
 
-  try {
-    writeFileSync(absolutePath, buffer);
-    chmodSync(absolutePath, 0o644);
-  } catch (error) {
-    console.error("[Uploads] Failed to persist file", error);
-    return { ok: false, status: 500, message: "Unable to save file" };
+  const uploadResult = await uploadToHostinger(buffer, folder, filename);
+
+  if (!uploadResult.success) {
+    console.error("[Uploads] Hostinger upload failed", uploadResult.error);
+    return { ok: false, status: 500, message: uploadResult.error ?? "Unable to upload file" };
   }
 
-  const url = publicBaseUrl ? `${publicBaseUrl}${relativePath}` : relativePath;
+  const url = uploadResult.url ?? "";
+  const relativePath = uploadResult.path ?? `/uploads/${folder}/${filename}`;
 
   return {
     ok: true,
@@ -456,7 +466,7 @@ const handleGenericUpload = async (c: Context) => {
         ? normalizeMimeType(fileEntry.type)
         : resolveMimeFromExtension(resolveExtension(originalFileName));
 
-      const result = persistUpload(folder, originalFileName, buffer, candidateMime);
+      const result = await persistUpload(folder, originalFileName, buffer, candidateMime);
 
       if (!result.ok) {
         return c.json({ success: false, error: result.message }, result.status);
@@ -509,7 +519,7 @@ const handleGenericUpload = async (c: Context) => {
     }
 
     const fallbackMime = resolvedMime || resolveMimeFromExtension(resolveExtension(fileName));
-    const result = persistUpload(folder, fileName, buffer, fallbackMime);
+    const result = await persistUpload(folder, fileName, buffer, fallbackMime);
 
     if (!result.ok) {
       return c.json({ success: false, error: result.message }, result.status);
