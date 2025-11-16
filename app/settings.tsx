@@ -33,16 +33,16 @@ import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
 import type { Settings } from "@/types";
 
-const ACCENT_COLORS: { name: string; value: string }[] = [
-  { name: "Pink", value: "#FF2D95" },
-  { name: "Blue", value: "#2196F3" },
-  { name: "Purple", value: "#9C27B0" },
-  { name: "Green", value: "#4CAF50" },
-  { name: "Orange", value: "#FF9800" },
-  { name: "Red", value: "#F44336" },
-  { name: "Teal", value: "#009688" },
-  { name: "Indigo", value: "#3F51B5" },
-];
+const ACCENT_COLORS = [
+  { name: "Pink", value: "#FF2D95" as const },
+  { name: "Blue", value: "#2196F3" as const },
+  { name: "Purple", value: "#9C27B0" as const },
+  { name: "Green", value: "#4CAF50" as const },
+  { name: "Orange", value: "#FF9800" as const },
+  { name: "Red", value: "#F44336" as const },
+  { name: "Teal", value: "#009688" as const },
+  { name: "Indigo", value: "#3F51B5" as const },
+] as const;
 
 const VIDEO_QUALITIES = ["auto", "1080p", "720p", "480p"] as const;
 
@@ -199,7 +199,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 void handleSettingChange("theme", value ? "dark" : "light");
               }}
-              trackColor={{ false: theme.colors.border, true: accentColor }}
+              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -219,13 +219,14 @@ export default function SettingsScreen() {
           >
             {ACCENT_COLORS.map((color) => {
               const isActive = localSettings.accentColor === color.value;
+              const bgColor = String(color.value);
               return (
                 <TouchableOpacity
                   key={color.value}
                   testID={`accent-color-${color.name.toLowerCase()}`}
                   style={[
                     styles.colorOption,
-                    { backgroundColor: color.value },
+                    { backgroundColor: bgColor },
                     isActive ? styles.colorOptionActive : undefined,
                   ]}
                   onPress={() => void handleSettingChange("accentColor", color.value)}
@@ -255,7 +256,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 void handleSettingChange("autoPlayNext", value);
               }}
-              trackColor={{ false: theme.colors.border, true: accentColor }}
+              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -275,7 +276,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 void handleSettingChange("autoPlayOnWifiOnly", value);
               }}
-              trackColor={{ false: theme.colors.border, true: accentColor }}
+              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -295,7 +296,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 void handleSettingChange("autoPlayOnOpen", value);
               }}
-              trackColor={{ false: theme.colors.border, true: accentColor }}
+              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -315,7 +316,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 void handleSettingChange("miniPlayerEnabled", value);
               }}
-              trackColor={{ false: theme.colors.border, true: accentColor }}
+              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -335,7 +336,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 void handleSettingChange("backgroundAudioEnabled", value);
               }}
-              trackColor={{ false: theme.colors.border, true: accentColor }}
+              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -356,7 +357,7 @@ export default function SettingsScreen() {
                 onValueChange={(value) => {
                   void handleSettingChange("pipEnabled", value);
                 }}
-                trackColor={{ false: theme.colors.border, true: accentColor }}
+                trackColor={{ false: theme.colors.border, true: String(accentColor) }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -372,6 +373,8 @@ export default function SettingsScreen() {
           <View style={styles.qualityContainer}>
             {VIDEO_QUALITIES.map((quality) => {
               const isSelected = localSettings.videoQuality === quality;
+              const bgColor = String(accentColor);
+              const borderColorValue = String(accentColor);
               return (
                 <TouchableOpacity
                   key={quality}
@@ -380,8 +383,8 @@ export default function SettingsScreen() {
                     styles.qualityOption,
                     isSelected
                       ? {
-                          backgroundColor: accentColor,
-                          borderColor: accentColor,
+                          backgroundColor: bgColor,
+                          borderColor: borderColorValue,
                         }
                       : undefined,
                   ]}
@@ -419,7 +422,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 void handleSettingChange("notificationsEnabled", value);
               }}
-              trackColor={{ false: theme.colors.border, true: accentColor }}
+              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -493,7 +496,7 @@ export default function SettingsScreen() {
                   onValueChange={(value) => {
                     void handleSettingChange("experimentalFeatures", value);
                   }}
-                  trackColor={{ false: theme.colors.border, true: accentColor }}
+                  trackColor={{ false: theme.colors.border, true: String(accentColor) }}
                   thumbColor="#FFFFFF"
                 />
               </View>
