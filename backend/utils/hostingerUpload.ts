@@ -17,7 +17,11 @@ const getFTPConfig = () => {
   const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? "https://moviedbr.com";
 
   if (!host || !user || !password) {
-    throw new Error("Hostinger FTP configuration incomplete. Please set HOSTINGER_FTP_HOST, HOSTINGER_FTP_USER, and HOSTINGER_FTP_PASSWORD.");
+    const missing = [];
+    if (!host) missing.push("HOSTINGER_FTP_HOST");
+    if (!user) missing.push("HOSTINGER_FTP_USER");
+    if (!password) missing.push("HOSTINGER_FTP_PASSWORD");
+    throw new Error(`Hostinger FTP configuration incomplete. Missing: ${missing.join(", ")}. Please configure these in your env file.`);
   }
 
   return {

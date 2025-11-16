@@ -610,6 +610,11 @@ app.post("/api/video/upload", async (c) => {
   return c.json({
     success: true,
     message: "Video uploaded successfully",
+    id: videoId,
+    file_url: videoUrl,
+    video_url: videoUrl,
+    thumbnail_url: thumbnailUrl,
+    thumbnail: thumbnailUrl,
     video: {
       id: videoId,
       title,
@@ -620,7 +625,6 @@ app.post("/api/video/upload", async (c) => {
       tags,
       description,
     },
-    file_url: videoUrl,
   });
 });
 

@@ -452,11 +452,19 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
       }
 
       const result = await response.json();
-      console.log(`${LOG_PREFIX} Upload result:`, result);
+      console.log(`${LOG_PREFIX} Upload result:`, JSON.stringify(result, null, 2));
 
-      if (!response.ok || !result.success) {
+      if (!response.ok) {
+        const errorMessage = result.error ?? result.message ?? `Upload failed with status ${response.status}`;
+        console.error(`${LOG_PREFIX} Upload failed (HTTP ${response.status}):`, errorMessage);
+        console.error(`${LOG_PREFIX} Full response:`, JSON.stringify(result, null, 2));
+        throw new Error(errorMessage);
+      }
+
+      if (!result.success) {
         const errorMessage = result.error ?? result.message ?? "Upload failed";
-        console.error(`${LOG_PREFIX} Upload failed:`, errorMessage);
+        console.error(`${LOG_PREFIX} Backend returned success=false:`, errorMessage);
+        console.error(`${LOG_PREFIX} Full response:`, JSON.stringify(result, null, 2));
         throw new Error(errorMessage);
       }
 
