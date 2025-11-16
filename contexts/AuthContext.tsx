@@ -6,11 +6,12 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Platform } from "react-native";
 import type { User, UserRole } from "../types";
 import { trpcClient, setTrpcAuthToken } from "../lib/trpc";
+import { getEnvApiRootUrl } from "@/utils/env";
 
 const AUTH_USER_KEY = "rork_auth_user";
 const AUTH_TOKEN_KEY = "rork_auth_token";
 
-const API_ROOT = "https://moviedbr.com/api";
+const API_ROOT = getEnvApiRootUrl();
 
 const AUTH_ENDPOINTS = {
   login: `${API_ROOT}/auth/login`,

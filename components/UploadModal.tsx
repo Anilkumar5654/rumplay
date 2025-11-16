@@ -20,6 +20,7 @@ import { X, Video as VideoIcon, Camera, Image as ImageIcon, Calendar } from "luc
 import { theme } from "../constants/theme";
 import { useAppState } from "../contexts/AppStateContext";
 import { Video, VideoUploadData, UploadProgress, UploadFolder } from "../types";
+import { getEnvApiBaseUrl, getEnvUploadEndpoint } from "../utils/env";
 
 const CATEGORIES = [
   "Technology",
@@ -52,7 +53,14 @@ const LOG_PREFIX = "[UploadModal]";
 export default function UploadModal({ visible, onClose, onUploadComplete }: { visible: boolean; onClose: () => void; onUploadComplete?: () => void }) {
   const { addVideo, currentUser, getChannelById } = useAppState();
 
-  const apiBase = process.env.EXPO_PUBLIC_API_URL ?? "";
+  let apiBase: string = "";
+  let uploadEndpoint: string = "";
+  try {
+    apiBase = getEnvApiBaseUrl();
+    uploadEndpoint = getEnvUploadEndpoint();
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Missing API base URL`, error);
+  }
 
   const [uploadData, setUploadData] = useState<Partial<VideoUploadData>>({
     title: "",
@@ -158,12 +166,12 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
   };
 
   const uploadMediaAsset = async (folder: UploadFolder, meta: MediaMeta) => {
-    if (!apiBase) {
+    if (!uploadEndpoint) {
       throw new Error("Backend URL not configured");
     }
     console.log(`${LOG_PREFIX} Uploading asset`, { folder, name: meta.name });
     const base64 = await readFileAsBase64(meta.uri);
-    const response = await fetch(`${apiBase}/api/uploads`, {
+    const response = await fetch(uploadEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -390,6 +398,10 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
   const validateUpload = (): boolean => {
     if (!apiBase) {
       Alert.alert("Configuration Error", "Backend URL not configured.");
+      return false;
+    }
+    if (!uploadEndpoint) {
+      Alert.alert("Configuration Error", "Upload endpoint not configured.");
       return false;
     }
     if (!uploadData.videoUri) {

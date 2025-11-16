@@ -2,12 +2,13 @@ import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
+import { getEnvApiBaseUrl, getEnvApiRootUrl, getEnvTrpcEndpoint } from "@/utils/env";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-const API_BASE_URL = "https://moviedbr.com";
-const API_ROOT_URL = "https://moviedbr.com/api";
-const TRPC_ENDPOINT = `${API_ROOT_URL}/trpc`;
+const API_BASE_URL = getEnvApiBaseUrl();
+const API_ROOT_URL = getEnvApiRootUrl();
+const TRPC_ENDPOINT = getEnvTrpcEndpoint();
 
 let authToken: string | null = null;
 
