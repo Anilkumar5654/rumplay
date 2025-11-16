@@ -21,7 +21,8 @@ const SHORTS_WIDTH = (width - theme.spacing.md * 3) / SHORTS_PER_ROW;
 export default function ShortsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { videos } = useAppState();
+  const appState = useAppState();
+  const videos = appState?.videos ?? [];
   const [refreshing, setRefreshing] = useState(false);
 
   const shorts = videos.filter((v) => v.isShort);
