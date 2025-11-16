@@ -1,4 +1,4 @@
-import { Video, Channel, User, Comment, Monetization, WatchHistoryItem } from '../types';
+import { Video, Channel, User, Comment, Monetization } from '../types';
 
 export const defaultMonetization: Monetization = {
   enabled: false,
@@ -66,6 +66,7 @@ export const defaultUser: User = {
   email: '',
   avatar: 'https://via.placeholder.com/150',
   bio: '',
+  phone: null,
   channelId: null,
   role: 'user' as const,
   subscriptions: [],

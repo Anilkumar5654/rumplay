@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit, Shield } from "lucide-react-native";
+import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit } from "lucide-react-native";
 import VideoEditModal from "../../components/VideoEditModal";
 import { Video } from "../../types";
 import { theme } from "../../constants/theme";
@@ -15,7 +15,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { currentUser, channels, videos } = useAppState();
-  const { isSuperAdmin, isAuthenticated, isAuthLoading } = useAuth();
+  const { authUser, isAuthenticated, isAuthLoading, roleDestination } = useAuth();
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [showMyVideos, setShowMyVideos] = useState(false);
@@ -26,24 +26,38 @@ export default function ProfileScreen() {
     }
   }, [isAuthenticated, isAuthLoading, router]);
 
-  const userChannel = currentUser.channelId 
-    ? channels.find((ch) => ch.id === currentUser.channelId)
+  const activeUser = useMemo(() => authUser ?? currentUser, [authUser, currentUser]);
+
+  const userChannel = activeUser.channelId
+    ? channels.find((ch) => ch.id === activeUser.channelId)
     : null;
 
   const myVideos = useMemo(() => {
-    return videos.filter((v) => v.uploaderId === currentUser.id || v.channelId === currentUser.channelId);
-  }, [videos, currentUser.id, currentUser.channelId]);
+    return videos.filter((v) => v.uploaderId === activeUser.id || v.channelId === activeUser.channelId);
+  }, [videos, activeUser.id, activeUser.channelId]);
 
   const myShorts = myVideos.filter((v) => v.isShort);
   const myRegularVideos = myVideos.filter((v) => !v.isShort);
 
+  const roleAction = useMemo(() => {
+    switch (activeUser.role) {
+      case "superadmin":
+        return { label: "Admin Area", route: "/super-admin" };
+      case "admin":
+        return { label: "Control Panel", route: "/admin-dashboard" };
+      case "creator":
+        return { label: "Creator Studio", route: "/creator-studio" };
+      default:
+        return null;
+    }
+  }, [activeUser.role]);
+
   const menuItems = [
     { icon: VideoIcon, label: "My Videos", count: myVideos.length, route: null, onPress: () => setShowMyVideos(!showMyVideos) },
-    { icon: History, label: "History", count: currentUser.watchHistory.length, route: null },
-    { icon: ThumbsUp, label: "Liked Videos", count: currentUser.likedVideos.length, route: null },
-    { icon: Bookmark, label: "Saved Videos", count: currentUser.savedVideos.length, route: null },
+    { icon: History, label: "History", count: activeUser.watchHistory.length, route: null },
+    { icon: ThumbsUp, label: "Liked Videos", count: activeUser.likedVideos.length, route: null },
+    { icon: Bookmark, label: "Saved Videos", count: activeUser.savedVideos.length, route: null },
     { icon: ListVideo, label: "Playlists", count: 0, route: null },
-    ...(isSuperAdmin() ? [{ icon: Shield, label: "Admin Panel", count: null, route: "/admin" }] : []),
     { icon: Settings, label: "Settings", count: null, route: "/settings" },
   ];
 
@@ -112,20 +126,31 @@ export default function ProfileScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.profileSection}>
-          <Image source={{ uri: currentUser.avatar }} style={styles.avatar} />
-          {isSuperAdmin() && (
-            <View style={styles.superAdminBadge}>
-              <Shield color="#FFD700" size={16} />
-              <Text style={styles.superAdminText}>SUPER ADMIN</Text>
-            </View>
-          )}
-          <Text style={styles.displayName}>{currentUser.displayName}</Text>
-          <Text style={styles.username}>@{currentUser.username}</Text>
-          {currentUser.bio && <Text style={styles.bio}>{currentUser.bio}</Text>}
-          
-          <TouchableOpacity style={styles.editButton} onPress={() => router.push("/edit-profile")}>
+          <Image
+            source={{ uri: activeUser.avatar || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }}
+            style={styles.avatar}
+          />
+          <Text style={styles.displayName}>{activeUser.displayName}</Text>
+          <Text style={styles.username}>@{activeUser.username}</Text>
+          {activeUser.bio && <Text style={styles.bio}>{activeUser.bio}</Text>}
+
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => router.push("/edit-profile")}
+            testID="profile-edit-button"
+          >
             <Text style={styles.editButtonText}>Edit Profile</Text>
           </TouchableOpacity>
+
+          {roleAction && (
+            <TouchableOpacity
+              style={styles.roleActionButton}
+              onPress={() => router.push(roleDestination ?? roleAction.route)}
+              testID="role-action-button"
+            >
+              <Text style={styles.roleActionLabel}>{roleAction.label}</Text>
+            </TouchableOpacity>
+          )}
 
           {userChannel && (
             <TouchableOpacity
@@ -135,19 +160,23 @@ export default function ProfileScreen() {
               <Text style={styles.channelButtonText}>View My Channel</Text>
             </TouchableOpacity>
           )}
+
+          {activeUser.phone && (
+            <Text style={styles.phoneText}>{activeUser.phone}</Text>
+          )}
         </View>
 
         <View style={styles.statsSection}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.subscriptions.length}</Text>
+            <Text style={styles.statValue}>{activeUser.subscriptions.length}</Text>
             <Text style={styles.statLabel}>Subscriptions</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.likedVideos.length}</Text>
+            <Text style={styles.statValue}>{activeUser.likedVideos.length}</Text>
             <Text style={styles.statLabel}>Liked</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.watchHistory.length}</Text>
+            <Text style={styles.statValue}>{activeUser.watchHistory.length}</Text>
             <Text style={styles.statLabel}>Watched</Text>
           </View>
         </View>
@@ -253,23 +282,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     marginBottom: theme.spacing.sm,
   },
-  superAdminBadge: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 6,
-    backgroundColor: "rgba(255, 215, 0, 0.1)",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 6,
-    borderRadius: theme.radii.full,
-    marginBottom: theme.spacing.sm,
+  roleActionButton: {
+    marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.lg,
     borderWidth: 1,
-    borderColor: "#FFD700",
+    borderColor: theme.colors.border,
   },
-  superAdminText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: "bold" as const,
-    color: "#FFD700",
-    letterSpacing: 1,
+  roleActionLabel: {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: "600" as const,
+    color: theme.colors.text,
   },
   displayName: {
     fontSize: theme.fontSizes.xl,

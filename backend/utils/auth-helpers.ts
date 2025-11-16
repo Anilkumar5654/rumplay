@@ -12,6 +12,7 @@ export const sanitizeUser = (user: StoredUser | null) => {
     displayName: user.displayName,
     avatar: user.avatar,
     bio: user.bio,
+    phone: user.phone,
     channelId: user.channelId,
     role: user.role,
     createdAt: user.createdAt,

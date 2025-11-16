@@ -12,6 +12,7 @@ type StoredUser = {
   salt: string;
   avatar: string | null;
   bio: string;
+  phone: string | null;
   channelId: string | null;
   role: UserRole;
   rolesAssignedBy?: string;
@@ -190,6 +191,7 @@ export const createUser = (params: {
     salt,
     avatar: fallbackAvatar,
     bio: "",
+    phone: null,
     channelId: null,
     role: params.role ?? "user",
     createdAt: now,
@@ -305,6 +307,7 @@ export const updateUser = (userId: string, updates: Partial<Omit<StoredUser, "id
     displayName: updates.displayName ?? existing.displayName,
     avatar: updates.avatar ?? existing.avatar,
     bio: updates.bio ?? existing.bio,
+    phone: updates.phone ?? existing.phone,
     role: updates.role ?? existing.role,
     passwordHash,
     salt,

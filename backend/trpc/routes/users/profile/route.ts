@@ -14,6 +14,7 @@ const sanitizeUser = (user: ReturnType<typeof findUserById>) => {
     displayName: user.displayName,
     avatar: user.avatar,
     bio: user.bio,
+    phone: user.phone,
     channelId: user.channelId,
     role: user.role,
     createdAt: user.createdAt,
@@ -37,6 +38,11 @@ export const updateProfileProcedure = protectedProcedure
       displayName: z.string().min(2).max(64).optional(),
       email: z.string().email().optional(),
       bio: z.string().max(280).optional(),
+      phone: z
+        .string()
+        .regex(/^[+\d\s()-]{6,20}$/)
+        .max(32)
+        .optional(),
       avatar: z.string().nullable().optional(),
       newPassword: z.string().min(8).optional(),
       currentPassword: z.string().optional(),
@@ -80,6 +86,7 @@ export const updateProfileProcedure = protectedProcedure
       email: input.email ?? targetUser.email,
       bio: input.bio ?? targetUser.bio,
       avatar: input.avatar === undefined ? targetUser.avatar : input.avatar,
+      phone: input.phone === undefined ? targetUser.phone : input.phone,
       password: input.newPassword,
     });
 

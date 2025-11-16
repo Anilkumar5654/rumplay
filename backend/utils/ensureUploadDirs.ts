@@ -1,4 +1,4 @@
-import { mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync, chmodSync } from "fs";
 import path from "path";
 
 const folders = {
@@ -11,7 +11,7 @@ const folders = {
   temp: "temp",
 } as const;
 
-type UploadFolder = keyof typeof folders;
+export type UploadFolder = keyof typeof folders;
 
 type EnsureResult = {
   absolutePath: string;
@@ -19,7 +19,8 @@ type EnsureResult = {
   filename: string;
 };
 
-const uploadRoot = path.join(process.cwd(), "upload");
+const publicRoot = path.join(process.cwd(), "public_html");
+const uploadRoot = path.join(publicRoot, "uploads");
 
 const sanitizeFilename = (rawName: string): string => {
   const trimmed = rawName.trim().replace(/\s+/g, "-");
@@ -28,14 +29,21 @@ const sanitizeFilename = (rawName: string): string => {
 };
 
 export const ensureUploadDirs = (): void => {
+  if (!existsSync(publicRoot)) {
+    mkdirSync(publicRoot, { recursive: true });
+    chmodSync(publicRoot, 0o755);
+  }
+
   if (!existsSync(uploadRoot)) {
     mkdirSync(uploadRoot, { recursive: true });
+    chmodSync(uploadRoot, 0o755);
   }
 
   Object.values(folders).forEach((folderName) => {
     const fullPath = path.join(uploadRoot, folderName);
     if (!existsSync(fullPath)) {
       mkdirSync(fullPath, { recursive: true });
+      chmodSync(fullPath, 0o755);
     }
   });
 };
@@ -44,11 +52,11 @@ export const resolveUploadPath = (folder: UploadFolder, rawFilename: string): En
   const safeName = sanitizeFilename(rawFilename);
   const timestamp = Date.now();
   const uniqueName = `${timestamp}-${safeName}`;
-  const relativePath = path.join("upload", folders[folder], uniqueName);
-  const absolutePath = path.join(process.cwd(), relativePath);
+  const publicRelativePath = path.join("uploads", folders[folder], uniqueName).replace(/\\/g, "/");
+  const absolutePath = path.join(publicRoot, publicRelativePath);
   return {
     absolutePath,
-    relativePath,
+    relativePath: `/${publicRelativePath}`,
     filename: uniqueName,
   };
 };

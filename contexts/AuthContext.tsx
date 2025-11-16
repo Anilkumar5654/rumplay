@@ -81,6 +81,7 @@ export type BackendUserPayload = {
   displayName: string;
   avatar: string | null;
   bio: string;
+  phone: string | null;
   channelId: string | null;
   role: UserRole;
   createdAt: string;
@@ -121,6 +122,7 @@ const mapBackendUser = (data: BackendUserPayload): User => ({
   displayName: data.displayName ?? data.username,
   avatar: data.avatar ?? "",
   bio: data.bio ?? "",
+  phone: data.phone ?? null,
   channelId: data.channelId ?? null,
   role: data.role,
   rolesAssignedBy: data.rolesAssignedBy,
@@ -452,6 +454,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           displayName: updates.displayName,
           email: updates.email,
           bio: updates.bio,
+          phone: updates.phone,
           avatar: updates.avatar,
           newPassword: updates.newPassword,
           currentPassword: updates.currentPassword,

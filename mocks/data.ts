@@ -1,4 +1,4 @@
-import { Video, Channel, User, Story, Ad, Playlist, UserRole } from '../types';
+import { Video, Channel, User, Story, Ad, Playlist } from '../types';
 import { defaultMonetization } from '../utils/defaults';
 
 export const mockChannels: Channel[] = [
@@ -334,6 +334,7 @@ export const mockUsers: User[] = [
     bio: 'Platform Super Administrator',
     channelId: null,
     role: 'superadmin' as const,
+    phone: '+1-555-0100',
     watchHistoryDetailed: [],
     subscriptions: [],
     memberships: [],
@@ -353,6 +354,7 @@ export const mockUsers: User[] = [
     bio: 'Content creator and tech enthusiast',
     channelId: 'ch1',
     role: 'user' as const,
+    phone: '+1-555-0123',
     watchHistoryDetailed: [],
     subscriptions: [
       { channelId: 'ch2', subscribedAt: '2024-06-01T00:00:00Z', notifications: true },

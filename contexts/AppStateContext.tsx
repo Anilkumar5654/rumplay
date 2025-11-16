@@ -89,12 +89,14 @@ export const [AppStateProvider, useAppState] = createContextHook(() => {
       const migratedUsers = parsedUsers.map((u: User) => ({
         ...u,
         role: u.role || 'user',
+        phone: u.phone ?? null,
         watchHistoryDetailed: u.watchHistoryDetailed || [],
       }));
 
       const migratedCurrentUser = {
         ...parsedCurrentUser,
         role: parsedCurrentUser.role || 'user',
+        phone: parsedCurrentUser.phone ?? null,
         watchHistoryDetailed: parsedCurrentUser.watchHistoryDetailed || [],
       };
 
@@ -338,7 +340,7 @@ export const [AppStateProvider, useAppState] = createContextHook(() => {
     );
   }, [users]);
 
-  return {
+  const value = useMemo(() => ({
     videos,
     channels,
     users,
@@ -364,5 +366,33 @@ export const [AppStateProvider, useAppState] = createContextHook(() => {
     getWatchPosition,
     isChannelNameUnique,
     isUsernameUnique,
-  };
+  }), [
+    videos,
+    channels,
+    users,
+    currentUser,
+    settings,
+    playlists,
+    reports,
+    isLoading,
+    getVideoById,
+    getChannelById,
+    updateVideo,
+    updateChannel,
+    addVideo,
+    deleteVideo,
+    toggleSubscription,
+    toggleVideoReaction,
+    addToWatchHistory,
+    toggleSaveVideo,
+    saveCurrentUser,
+    saveSettings,
+    savePlaylists,
+    addReport,
+    getWatchPosition,
+    isChannelNameUnique,
+    isUsernameUnique,
+  ]);
+
+  return value;
 });

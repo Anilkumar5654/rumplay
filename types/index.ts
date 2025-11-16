@@ -135,6 +135,7 @@ export interface User {
   password?: string;
   avatar: string;
   bio: string;
+  phone: string | null;
   channelId: string | null;
   role: UserRole;
   rolesAssignedBy?: string;
