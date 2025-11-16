@@ -34,5 +34,5 @@ export const getEnvTrpcEndpoint = (): string => {
 
 export const getEnvUploadEndpoint = (): string => {
   const root = getEnvApiRootUrl();
-  return `${root}/upload.php`;
+  return `${root}/upload`;
 };

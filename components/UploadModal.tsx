@@ -423,7 +423,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
 
       setProgress({ progress: 30, status: "uploading", message: "Uploading video..." });
 
-      const uploadUrl = `${apiBase}/api/video/upload.php`;
+      const uploadUrl = `${apiBase}/api/video/upload`;
       console.log(`${LOG_PREFIX} Uploading to: ${uploadUrl}`);
 
       const response = await fetch(uploadUrl, {

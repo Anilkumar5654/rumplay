@@ -73,7 +73,7 @@ export const uploadVideoToBackend = async (options: VideoUploadOptions): Promise
 
   try {
     const apiRoot = getEnvApiRootUrl();
-    const uploadEndpoint = isShort ? `${apiRoot}/shorts/upload.php` : `${apiRoot}/video/upload.php`;
+    const uploadEndpoint = isShort ? `${apiRoot}/shorts/upload` : `${apiRoot}/video/upload`;
 
     console.log(`${LOG_PREFIX} Uploading ${isShort ? "short" : "video"} to ${uploadEndpoint}`);
 
@@ -147,7 +147,7 @@ export const uploadMediaFile = async (
 ): Promise<UploadResponse> => {
   try {
     const apiRoot = getEnvApiRootUrl();
-    const uploadEndpoint = `${apiRoot}/upload.php`;
+    const uploadEndpoint = `${apiRoot}/upload`;
 
     console.log(`${LOG_PREFIX} Uploading media file to ${uploadEndpoint}`, { folder, fileName });
 
