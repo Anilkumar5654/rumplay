@@ -13,11 +13,13 @@ import {
   ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import type { ImagePickerAsset } from "expo-image-picker";
 import * as VideoThumbnails from "expo-video-thumbnails";
+import * as FileSystem from "expo-file-system";
 import { X, Video as VideoIcon, Camera, Image as ImageIcon, Calendar } from "lucide-react-native";
-import { theme } from "@/constants/theme";
-import { useAppState } from "@/contexts/AppStateContext";
-import { Video, VideoUploadData, UploadProgress } from "@/types";
+import { theme } from "../constants/theme";
+import { useAppState } from "../contexts/AppStateContext";
+import { Video, VideoUploadData, UploadProgress, UploadFolder } from "../types";
 
 const CATEGORIES = [
   "Technology",
@@ -39,14 +41,18 @@ const VISIBILITY_OPTIONS = [
   { value: "scheduled" as const, label: "Scheduled", description: "Publish later" },
 ];
 
-interface UploadModalProps {
-  visible: boolean;
-  onClose: () => void;
-  onUploadComplete?: () => void;
-}
+type MediaMeta = {
+  uri: string;
+  name: string;
+  mimeType: string;
+};
 
-export default function UploadModal({ visible, onClose, onUploadComplete }: UploadModalProps) {
+const LOG_PREFIX = "[UploadModal]";
+
+export default function UploadModal({ visible, onClose, onUploadComplete }: { visible: boolean; onClose: () => void; onUploadComplete?: () => void }) {
   const { addVideo, currentUser, getChannelById } = useAppState();
+
+  const apiBase = process.env.EXPO_PUBLIC_API_URL ?? "";
 
   const [uploadData, setUploadData] = useState<Partial<VideoUploadData>>({
     title: "",
@@ -68,6 +74,119 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
   });
 
   const [tagInput, setTagInput] = useState("");
+  const [videoMeta, setVideoMeta] = useState<MediaMeta | null>(null);
+  const [thumbnailMeta, setThumbnailMeta] = useState<MediaMeta | null>(null);
+
+  const inferExtension = (uri: string, fallback: string): string => {
+    const sanitized = uri.split("?")[0];
+    const segment = sanitized.split("/").pop() ?? "";
+    const ext = segment.split(".").pop();
+    return ext ? ext.toLowerCase() : fallback;
+  };
+
+  const mimeFromExtension = (extension: string): string => {
+    switch (extension) {
+      case "png":
+        return "image/png";
+      case "jpg":
+      case "jpeg":
+        return "image/jpeg";
+      case "mp4":
+        return "video/mp4";
+      case "mov":
+        return "video/quicktime";
+      case "m4v":
+        return "video/x-m4v";
+      case "webm":
+        return "video/webm";
+      case "3gp":
+        return "video/3gpp";
+      default:
+        return "application/octet-stream";
+    }
+  };
+
+  const ensureMeta = (meta: MediaMeta | null, fallbackUri: string, prefix: string, fallbackExtension: string): MediaMeta => {
+    const targetUri = meta?.uri ?? fallbackUri;
+    if (!targetUri) {
+      throw new Error("Missing media reference");
+    }
+    const extension = inferExtension(targetUri, fallbackExtension);
+    const name = meta?.name ?? `${prefix}-${Date.now()}.${extension}`;
+    const mimeType = meta?.mimeType ?? mimeFromExtension(extension);
+    return { uri: targetUri, name, mimeType: mimeType.toLowerCase() };
+  };
+
+  const createVideoMetaFromAsset = (asset: ImagePickerAsset): MediaMeta => {
+    const extension = inferExtension(asset.uri, "mp4");
+    const candidateMime = ((asset as { mimeType?: string }).mimeType ?? asset.type ?? mimeFromExtension(extension)).toLowerCase();
+    const name = asset.fileName ?? `video-${Date.now()}.${extension}`;
+    return { uri: asset.uri, name, mimeType: candidateMime };
+  };
+
+  const createThumbnailMetaFromUri = (uri: string): MediaMeta => {
+    return ensureMeta(null, uri, "thumbnail", "jpg");
+  };
+
+  const readFileAsBase64 = async (uri: string): Promise<string> => {
+    if (Platform.OS === "web") {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error("Unable to access file data");
+      }
+      const blob = await response.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result;
+          if (typeof result === "string") {
+            const base64String = result.split(",").pop();
+            if (base64String) {
+              resolve(base64String);
+              return;
+            }
+          }
+          reject(new Error("Failed to process file"));
+        };
+        reader.onerror = () => {
+          reject(new Error("Failed to process file"));
+        };
+        reader.readAsDataURL(blob);
+      });
+    }
+    return FileSystem.readAsStringAsync(uri, { encoding: "base64" as FileSystem.EncodingType });
+  };
+
+  const uploadMediaAsset = async (folder: UploadFolder, meta: MediaMeta) => {
+    if (!apiBase) {
+      throw new Error("Backend URL not configured");
+    }
+    console.log(`${LOG_PREFIX} Uploading asset`, { folder, name: meta.name });
+    const base64 = await readFileAsBase64(meta.uri);
+    const response = await fetch(`${apiBase}/api/uploads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: meta.name,
+        fileData: `data:${meta.mimeType};base64,${base64}`,
+        folder,
+        mimeType: meta.mimeType,
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      const message = payload?.error ?? "Upload failed";
+      console.error(`${LOG_PREFIX} Upload failed`, { folder, message, status: response.status });
+      throw new Error(message);
+    }
+    return {
+      url: payload.url as string,
+      path: payload.path as string,
+      filename: payload.filename as string,
+      mimeType: payload.mimeType as string,
+      size: payload.size as number,
+    };
+  };
 
   const resetModal = () => {
     setUploadData({
@@ -88,6 +207,8 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
       message: "",
     });
     setTagInput("");
+    setVideoMeta(null);
+    setThumbnailMeta(null);
   };
 
   const handleClose = () => {
@@ -103,7 +224,6 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
     if (Platform.OS !== "web") {
       const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
       const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
       if (cameraStatus !== "granted" || mediaStatus !== "granted") {
         Alert.alert("Permission Required", "Camera and media permissions are required.");
         return false;
@@ -115,17 +235,13 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
   const generateThumbnail = async (videoUri: string) => {
     try {
       if (Platform.OS === "web") {
-        return "https://picsum.photos/1280/720?random=" + Date.now();
+        return `https://picsum.photos/1280/720?random=${Date.now()}`;
       }
-
-      const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, {
-        time: 1000,
-        quality: 0.8,
-      });
+      const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: 1000, quality: 0.8 });
       return uri;
     } catch (error) {
-      console.error("Error generating thumbnail:", error);
-      return "https://picsum.photos/1280/720?random=" + Date.now();
+      console.error(`${LOG_PREFIX} Thumbnail generation failed`, error);
+      return `https://picsum.photos/1280/720?fallback=${Date.now()}`;
     }
   };
 
@@ -157,20 +273,23 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
       });
 
       if (!result.canceled && result.assets[0]) {
-        const video = result.assets[0];
+        const asset = result.assets[0] as ImagePickerAsset;
         setProgress({ progress: 10, status: "processing", message: "Processing video..." });
 
-        const duration = video.duration || (await getVideoDuration(video.uri)) || 0;
+        const duration = asset.duration || (await getVideoDuration(asset.uri)) || 0;
         const isShort = duration > 0 && duration < 60;
-        const thumbnailUri = await generateThumbnail(video.uri);
+        const thumbnailUri = await generateThumbnail(asset.uri);
 
-        setUploadData({
-          ...uploadData,
-          videoUri: video.uri,
+        setUploadData((prev) => ({
+          ...prev,
+          videoUri: asset.uri,
           thumbnailUri,
           duration,
           isShort,
-        });
+        }));
+
+        setVideoMeta(createVideoMetaFromAsset(asset));
+        setThumbnailMeta(createThumbnailMetaFromUri(thumbnailUri));
 
         setProgress({ progress: 0, status: "idle", message: "" });
 
@@ -179,7 +298,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
         }
       }
     } catch (error) {
-      console.error("Error picking video:", error);
+      console.error(`${LOG_PREFIX} Video pick failed`, error);
       Alert.alert("Error", "Failed to pick video.");
       setProgress({ progress: 0, status: "error", message: "Failed to pick video" });
     }
@@ -197,20 +316,23 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
       });
 
       if (!result.canceled && result.assets[0]) {
-        const video = result.assets[0];
+        const asset = result.assets[0] as ImagePickerAsset;
         setProgress({ progress: 10, status: "processing", message: "Processing video..." });
 
-        const duration = video.duration || (await getVideoDuration(video.uri)) || 0;
+        const duration = asset.duration || (await getVideoDuration(asset.uri)) || 0;
         const isShort = duration > 0 && duration < 60;
-        const thumbnailUri = await generateThumbnail(video.uri);
+        const thumbnailUri = await generateThumbnail(asset.uri);
 
-        setUploadData({
-          ...uploadData,
-          videoUri: video.uri,
+        setUploadData((prev) => ({
+          ...prev,
+          videoUri: asset.uri,
           thumbnailUri,
           duration,
           isShort,
-        });
+        }));
+
+        setVideoMeta(createVideoMetaFromAsset(asset));
+        setThumbnailMeta(createThumbnailMetaFromUri(thumbnailUri));
 
         setProgress({ progress: 0, status: "idle", message: "" });
 
@@ -219,7 +341,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
         }
       }
     } catch (error) {
-      console.error("Error recording video:", error);
+      console.error(`${LOG_PREFIX} Video record failed`, error);
       Alert.alert("Error", "Failed to record video.");
       setProgress({ progress: 0, status: "error", message: "Failed to record video" });
     }
@@ -238,32 +360,38 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
       });
 
       if (!result.canceled && result.assets[0]) {
-        setUploadData({ ...uploadData, thumbnailUri: result.assets[0].uri });
+        const asset = result.assets[0] as ImagePickerAsset;
+        setUploadData((prev) => ({ ...prev, thumbnailUri: asset.uri }));
+        setThumbnailMeta(createThumbnailMetaFromUri(asset.uri));
       }
     } catch (error) {
-      console.error("Error picking thumbnail:", error);
+      console.error(`${LOG_PREFIX} Thumbnail pick failed`, error);
       Alert.alert("Error", "Failed to pick thumbnail.");
     }
   };
 
   const addTag = () => {
-    if (tagInput.trim() && uploadData.tags && uploadData.tags.length < 10) {
-      setUploadData({
-        ...uploadData,
-        tags: [...uploadData.tags, tagInput.trim()],
-      });
+    if (tagInput.trim()) {
+      setUploadData((prev) => ({
+        ...prev,
+        tags: prev.tags && prev.tags.length < 10 ? [...prev.tags, tagInput.trim()] : prev.tags ?? [tagInput.trim()],
+      }));
       setTagInput("");
     }
   };
 
   const removeTag = (tag: string) => {
-    setUploadData({
-      ...uploadData,
-      tags: uploadData.tags?.filter((t) => t !== tag) || [],
-    });
+    setUploadData((prev) => ({
+      ...prev,
+      tags: prev.tags?.filter((t) => t !== tag) ?? [],
+    }));
   };
 
   const validateUpload = (): boolean => {
+    if (!apiBase) {
+      Alert.alert("Configuration Error", "Backend URL not configured.");
+      return false;
+    }
     if (!uploadData.videoUri) {
       Alert.alert("Error", "Please select or record a video.");
       return false;
@@ -283,23 +411,23 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
     return true;
   };
 
-  const simulateUploadProgress = async () => {
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      setProgress({
-        progress: i,
-        status: "uploading",
-        message: `Uploading... ${i}%`,
-      });
-    }
-  };
-
   const handleUpload = async () => {
-    if (!validateUpload()) return;
+    if (!validateUpload()) {
+      return;
+    }
 
     try {
-      setProgress({ progress: 0, status: "uploading", message: "Starting upload..." });
-      await simulateUploadProgress();
+      setProgress({ progress: 5, status: "uploading", message: "Uploading video..." });
+
+      const resolvedVideoMeta = ensureMeta(videoMeta, uploadData.videoUri ?? "", "video", "mp4");
+      const videoFolder: UploadFolder = uploadData.isShort ? "shorts" : "videos";
+      const uploadedVideo = await uploadMediaAsset(videoFolder, resolvedVideoMeta);
+
+      setProgress({ progress: 65, status: "uploading", message: "Uploading thumbnail..." });
+      const resolvedThumbnailMeta = ensureMeta(thumbnailMeta, uploadData.thumbnailUri ?? "", "thumbnail", "jpg");
+      const uploadedThumbnail = await uploadMediaAsset("thumbnails", resolvedThumbnailMeta);
+
+      setProgress({ progress: 85, status: "processing", message: "Saving video..." });
 
       const userChannel = currentUser.channelId ? getChannelById(currentUser.channelId) : null;
 
@@ -307,8 +435,8 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
         id: `v${Date.now()}`,
         title: uploadData.title || "Untitled Video",
         description: uploadData.description || "",
-        thumbnail: uploadData.thumbnailUri || "",
-        videoUrl: uploadData.videoUri || "",
+        thumbnail: uploadedThumbnail.url,
+        videoUrl: uploadedVideo.url,
         channelId: currentUser.channelId || "ch1",
         channelName: userChannel?.name || currentUser.displayName,
         channelAvatar: userChannel?.avatar || currentUser.avatar,
@@ -342,11 +470,12 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
             },
           },
         ]);
-      }, 500);
+      }, 350);
     } catch (error) {
-      console.error("Upload error:", error);
-      setProgress({ progress: 0, status: "error", message: "Upload failed" });
-      Alert.alert("Error", "Failed to upload video.");
+      const message = error instanceof Error ? error.message : "Upload failed";
+      console.error(`${LOG_PREFIX} Upload error`, error);
+      setProgress({ progress: 0, status: "error", message });
+      Alert.alert("Upload Failed", message);
     }
   };
 
@@ -357,7 +486,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Upload Video</Text>
-          <TouchableOpacity onPress={handleClose} disabled={isUploading}>
+          <TouchableOpacity onPress={handleClose} disabled={isUploading} testID="upload-close-button">
             <X color={theme.colors.text} size={24} />
           </TouchableOpacity>
         </View>
@@ -365,12 +494,12 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {!uploadData.videoUri ? (
             <View style={styles.uploadOptions}>
-              <TouchableOpacity style={styles.uploadButton} onPress={pickVideo}>
+              <TouchableOpacity style={styles.uploadButton} onPress={pickVideo} disabled={isUploading} testID="upload-pick-video">
                 <VideoIcon color={theme.colors.primary} size={48} />
                 <Text style={styles.uploadButtonText}>Pick from Gallery</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.uploadButton} onPress={recordVideo}>
+              <TouchableOpacity style={styles.uploadButton} onPress={recordVideo} disabled={isUploading} testID="upload-record-video">
                 <Camera color={theme.colors.primary} size={48} />
                 <Text style={styles.uploadButtonText}>Record Video</Text>
               </TouchableOpacity>
@@ -379,7 +508,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
             <>
               <View style={styles.videoPreview}>
                 <Image source={{ uri: uploadData.thumbnailUri }} style={styles.thumbnail} />
-                <TouchableOpacity style={styles.changeThumbnailButton} onPress={pickThumbnail}>
+                <TouchableOpacity style={styles.changeThumbnailButton} onPress={pickThumbnail} disabled={isUploading} testID="upload-change-thumbnail">
                   <ImageIcon color="#FFFFFF" size={16} />
                   <Text style={styles.changeThumbnailText}>Change Thumbnail</Text>
                 </TouchableOpacity>
@@ -399,7 +528,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
                   placeholder="Enter video title"
                   placeholderTextColor={theme.colors.textSecondary}
                   value={uploadData.title}
-                  onChangeText={(text) => setUploadData({ ...uploadData, title: text })}
+                  onChangeText={(text) => setUploadData((prev) => ({ ...prev, title: text }))}
                   editable={!isUploading}
                   maxLength={100}
                 />
@@ -412,7 +541,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
                   placeholder="Enter video description"
                   placeholderTextColor={theme.colors.textSecondary}
                   value={uploadData.description}
-                  onChangeText={(text) => setUploadData({ ...uploadData, description: text })}
+                  onChangeText={(text) => setUploadData((prev) => ({ ...prev, description: text }))}
                   multiline
                   numberOfLines={4}
                   editable={!isUploading}
@@ -428,21 +557,11 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
                   {CATEGORIES.map((cat) => (
                     <TouchableOpacity
                       key={cat}
-                      style={[
-                        styles.categoryChip,
-                        uploadData.category === cat && styles.categoryChipActive,
-                      ]}
-                      onPress={() => setUploadData({ ...uploadData, category: cat })}
+                      style={[styles.categoryChip, uploadData.category === cat && styles.categoryChipActive]}
+                      onPress={() => setUploadData((prev) => ({ ...prev, category: cat }))}
                       disabled={isUploading}
                     >
-                      <Text
-                        style={[
-                          styles.categoryChipText,
-                          uploadData.category === cat && styles.categoryChipTextActive,
-                        ]}
-                      >
-                        {cat}
-                      </Text>
+                      <Text style={[styles.categoryChipText, uploadData.category === cat && styles.categoryChipTextActive]}>{cat}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -461,7 +580,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
                     returnKeyType="done"
                     editable={!isUploading}
                   />
-                  <TouchableOpacity style={styles.addTagButton} onPress={addTag} disabled={isUploading}>
+                  <TouchableOpacity style={styles.addTagButton} onPress={addTag} disabled={isUploading} testID="upload-add-tag">
                     <Text style={styles.addTagButtonText}>Add</Text>
                   </TouchableOpacity>
                 </View>
@@ -484,23 +603,15 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
                 {VISIBILITY_OPTIONS.map((option) => (
                   <TouchableOpacity
                     key={option.value}
-                    style={[
-                      styles.visibilityOption,
-                      uploadData.visibility === option.value && styles.visibilityOptionActive,
-                    ]}
-                    onPress={() => setUploadData({ ...uploadData, visibility: option.value })}
+                    style={[styles.visibilityOption, uploadData.visibility === option.value && styles.visibilityOptionActive]}
+                    onPress={() => setUploadData((prev) => ({ ...prev, visibility: option.value }))}
                     disabled={isUploading}
                   >
                     <View style={styles.visibilityOptionContent}>
                       <Text style={styles.visibilityLabel}>{option.label}</Text>
                       <Text style={styles.visibilityDescription}>{option.description}</Text>
                     </View>
-                    <View
-                      style={[
-                        styles.radio,
-                        uploadData.visibility === option.value && styles.radioActive,
-                      ]}
-                    />
+                    <View style={[styles.radio, uploadData.visibility === option.value && styles.radioActive]} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -510,15 +621,11 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
                   <Text style={styles.label}>
                     Scheduled Date <Text style={styles.required}>*</Text>
                   </Text>
-                  <TouchableOpacity style={styles.dateButton}>
+                  <TouchableOpacity style={styles.dateButton} disabled>
                     <Calendar color={theme.colors.text} size={20} />
-                    <Text style={styles.dateButtonText}>
-                      {uploadData.scheduledDate || "Select date and time"}
-                    </Text>
+                    <Text style={styles.dateButtonText}>{uploadData.scheduledDate || "Select date and time"}</Text>
                   </TouchableOpacity>
-                  <Text style={styles.helperText}>
-                    Note: Scheduling functionality coming soon
-                  </Text>
+                  <Text style={styles.helperText}>Scheduling functionality coming soon</Text>
                 </View>
               )}
 
@@ -535,12 +642,9 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: Uplo
                 style={[styles.uploadSubmitButton, isUploading && styles.uploadSubmitButtonDisabled]}
                 onPress={handleUpload}
                 disabled={isUploading}
+                testID="upload-submit-button"
               >
-                {isUploading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.uploadSubmitButtonText}>Upload Video</Text>
-                )}
+                {isUploading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.uploadSubmitButtonText}>Upload Video</Text>}
               </TouchableOpacity>
             </>
           )}

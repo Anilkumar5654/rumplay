@@ -58,11 +58,65 @@ const uploadRequestSchema = z.object({
   fileName: z.string().min(3),
   fileData: z.string().min(10),
   folder: uploadFolderSchema.default("profiles"),
+  mimeType: z.string().optional(),
 });
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const allowedImageMimeTypes = new Set(["image/png", "image/jpeg"]);
-const allowedImageExtensions = new Set(["png", "jpg", "jpeg"]);
+type FolderConfig = {
+  maxBytes: number;
+  allowedMimeTypes: Set<string>;
+  allowedExtensions: Set<string>;
+};
+
+const folderConfigs: Record<UploadFolder, FolderConfig> = {
+  profiles: {
+    maxBytes: 5 * 1024 * 1024,
+    allowedMimeTypes: new Set(["image/png", "image/jpeg"]),
+    allowedExtensions: new Set(["png", "jpg", "jpeg"]),
+  },
+  thumbnails: {
+    maxBytes: 8 * 1024 * 1024,
+    allowedMimeTypes: new Set(["image/png", "image/jpeg"]),
+    allowedExtensions: new Set(["png", "jpg", "jpeg"]),
+  },
+  banners: {
+    maxBytes: 12 * 1024 * 1024,
+    allowedMimeTypes: new Set(["image/png", "image/jpeg"]),
+    allowedExtensions: new Set(["png", "jpg", "jpeg"]),
+  },
+  videos: {
+    maxBytes: 250 * 1024 * 1024,
+    allowedMimeTypes: new Set(["video/mp4", "video/quicktime", "video/x-m4v", "video/webm", "video/3gpp", "video/3gp"]),
+    allowedExtensions: new Set(["mp4", "mov", "m4v", "webm", "3gp"]),
+  },
+  shorts: {
+    maxBytes: 120 * 1024 * 1024,
+    allowedMimeTypes: new Set(["video/mp4", "video/quicktime", "video/x-m4v", "video/webm", "video/3gpp", "video/3gp"]),
+    allowedExtensions: new Set(["mp4", "mov", "m4v", "webm", "3gp"]),
+  },
+};
+
+const fallbackMimeByExtension: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  m4v: "video/x-m4v",
+  webm: "video/webm",
+  "3gp": "video/3gpp",
+};
+
+const fileFieldCandidates = ["file", "media", "upload", "asset"] as const;
+
+const resolveExtension = (fileName: string): string => {
+  return fileName.split(".").pop()?.toLowerCase() ?? "";
+};
+
+const resolveMimeFromExtension = (extension: string): string => {
+  return fallbackMimeByExtension[extension] ?? "";
+};
+
+const normalizeMimeType = (value: string): string => value.toLowerCase();
 
 const resolvePublicBaseUrl = () => {
   const raw = process.env.PUBLIC_BASE_URL;
@@ -73,6 +127,101 @@ const resolvePublicBaseUrl = () => {
 };
 
 const publicBaseUrl = resolvePublicBaseUrl();
+
+type FileLike = {
+  name?: string;
+  type?: string;
+  size?: number;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+};
+
+type PersistSuccess = {
+  relativePath: string;
+  url: string;
+  mimeType: string;
+  filename: string;
+  size: number;
+};
+
+type PersistResult =
+  | { ok: true; data: PersistSuccess }
+  | { ok: false; status: number; message: string };
+
+const parseFolderInput = (value: unknown): UploadFolder => {
+  const candidate = typeof value === "string" ? value : "profiles";
+  const parsed = uploadFolderSchema.safeParse(candidate);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  return "profiles";
+};
+
+const isFileLike = (value: unknown): value is FileLike => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as FileLike;
+  return typeof candidate.arrayBuffer === "function";
+};
+
+const formatLimit = (bytes: number): string => {
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) {
+    return `${Math.round(mb * 10) / 10}MB`;
+  }
+  const kb = bytes / 1024;
+  return `${Math.round(kb)}KB`;
+};
+
+const persistUpload = (folder: UploadFolder, originalFileName: string, buffer: Buffer, mimeType: string): PersistResult => {
+  const config = folderConfigs[folder] ?? folderConfigs.profiles;
+  const extension = resolveExtension(originalFileName);
+  const resolvedMime = mimeType ? normalizeMimeType(mimeType) : resolveMimeFromExtension(extension);
+
+  if (!extension || !config.allowedExtensions.has(extension)) {
+    console.error("[Uploads] Unsupported extension", { folder, extension, originalFileName });
+    return { ok: false, status: 400, message: `Unsupported file extension for ${folder}` };
+  }
+
+  if (!resolvedMime || !config.allowedMimeTypes.has(resolvedMime)) {
+    console.error("[Uploads] Unsupported mime", { folder, resolvedMime, originalFileName });
+    return { ok: false, status: 400, message: `Unsupported file type for ${folder}` };
+  }
+
+  if (buffer.length === 0) {
+    return { ok: false, status: 400, message: "Empty file" };
+  }
+
+  if (buffer.length > config.maxBytes) {
+    console.error("[Uploads] File exceeds limit", { folder, size: buffer.length, limit: config.maxBytes });
+    return { ok: false, status: 400, message: `File exceeds ${formatLimit(config.maxBytes)} limit` };
+  }
+
+  ensureUploadDirs();
+
+  const { absolutePath, relativePath, filename } = resolveUploadPath(folder, originalFileName);
+
+  try {
+    writeFileSync(absolutePath, buffer);
+    chmodSync(absolutePath, 0o644);
+  } catch (error) {
+    console.error("[Uploads] Failed to persist file", error);
+    return { ok: false, status: 500, message: "Unable to save file" };
+  }
+
+  const url = publicBaseUrl ? `${publicBaseUrl}${relativePath}` : relativePath;
+
+  return {
+    ok: true,
+    data: {
+      relativePath,
+      url,
+      mimeType: resolvedMime,
+      filename,
+      size: buffer.length,
+    },
+  };
+};
 
 app.use("*", async (c, next) => {
   const requestOrigin = c.req.header("origin") ?? "";
@@ -139,79 +288,113 @@ app.get("/uploads/*", (c) => {
 });
 
 app.post("/api/uploads", async (c) => {
-  const payload = await c.req.json().catch(() => null);
-  const parsed = uploadRequestSchema.safeParse(payload);
+  const contentType = c.req.header("content-type") ?? "";
+  console.log("[Uploads] Incoming request", { contentType });
 
-  if (!parsed.success) {
-    return c.json({ success: false, error: "Invalid payload" }, 400);
-  }
+  try {
+    if (contentType.includes("multipart/form-data")) {
+      const rawBody = (await c.req.parseBody()) as Record<string, unknown>;
+      const folder = parseFolderInput(rawBody.folder);
 
-  const { fileName, fileData, folder } = parsed.data;
-  const dataMatch = fileData.match(/^data:(.+);base64,(.+)$/);
-  let mimeType = "";
-  let base64String = fileData;
+      const resolvedFileValue = fileFieldCandidates
+        .map((key) => rawBody[key as string])
+        .find((value) => value !== undefined && value !== null);
 
-  if (dataMatch) {
-    mimeType = dataMatch[1]?.toLowerCase() ?? "";
-    base64String = dataMatch[2];
-  }
+      let fileEntry: FileLike | null = null;
 
-  const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
+      if (Array.isArray(resolvedFileValue)) {
+        fileEntry = resolvedFileValue.find((item) => isFileLike(item)) ?? null;
+      } else if (isFileLike(resolvedFileValue)) {
+        fileEntry = resolvedFileValue;
+      }
 
-  if (!allowedImageExtensions.has(extension)) {
-    return c.json({ success: false, error: "Unsupported file extension" }, 400);
-  }
+      if (!fileEntry) {
+        console.error("[Uploads] Multipart request missing file", { keys: Object.keys(rawBody) });
+        return c.json({ success: false, error: "Missing file" }, 400);
+      }
 
-  if (!mimeType) {
-    if (extension === "png") {
-      mimeType = "image/png";
-    } else if (extension === "jpg" || extension === "jpeg") {
-      mimeType = "image/jpeg";
+      const providedName = typeof rawBody.fileName === "string" && rawBody.fileName.trim().length > 0 ? rawBody.fileName.trim() : undefined;
+      const originalFileName = providedName || fileEntry.name || `upload-${Date.now()}`;
+      const arrayBuffer = await fileEntry.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const candidateMime = typeof fileEntry.type === "string" && fileEntry.type.length > 0
+        ? normalizeMimeType(fileEntry.type)
+        : resolveMimeFromExtension(resolveExtension(originalFileName));
+
+      const result = persistUpload(folder, originalFileName, buffer, candidateMime);
+
+      if (!result.ok) {
+        return c.json({ success: false, error: result.message }, result.status);
+      }
+
+      console.log("[Uploads] Stored file", { folder, filename: result.data.filename, size: result.data.size });
+
+      return c.json({
+        success: true,
+        folder,
+        path: result.data.relativePath,
+        url: result.data.url,
+        mimeType: result.data.mimeType,
+        size: result.data.size,
+        filename: result.data.filename,
+      });
     }
-  }
 
-  if (!allowedImageMimeTypes.has(mimeType)) {
-    return c.json({ success: false, error: "Unsupported file type" }, 400);
-  }
+    const payload = await c.req.json().catch(() => null);
+    const parsed = uploadRequestSchema.safeParse(payload);
 
-  let buffer: Buffer;
-  try {
-    buffer = Buffer.from(base64String, "base64");
+    if (!parsed.success) {
+      console.error("[Uploads] Invalid JSON payload", parsed.error.flatten());
+      return c.json({ success: false, error: "Invalid payload" }, 400);
+    }
+
+    const { fileName, fileData, folder, mimeType } = parsed.data;
+    let dataString = fileData;
+    let resolvedMime = mimeType ? normalizeMimeType(mimeType) : "";
+    const dataMatch = fileData.match(/^data:(.+);base64,(.+)$/);
+
+    if (dataMatch) {
+      const embeddedMime = dataMatch[1];
+      if (embeddedMime && embeddedMime.length > 0) {
+        resolvedMime = normalizeMimeType(embeddedMime);
+      }
+      dataString = dataMatch[2];
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(dataString, "base64");
+    } catch (error) {
+      console.error("[Uploads] Failed to decode base64", error);
+      return c.json({ success: false, error: "Invalid file data" }, 400);
+    }
+
+    if (buffer.length === 0) {
+      return c.json({ success: false, error: "Empty file" }, 400);
+    }
+
+    const fallbackMime = resolvedMime || resolveMimeFromExtension(resolveExtension(fileName));
+    const result = persistUpload(folder, fileName, buffer, fallbackMime);
+
+    if (!result.ok) {
+      return c.json({ success: false, error: result.message }, result.status);
+    }
+
+    console.log("[Uploads] Stored base64 file", { folder, filename: result.data.filename, size: result.data.size });
+
+    return c.json({
+      success: true,
+      folder,
+      path: result.data.relativePath,
+      url: result.data.url,
+      mimeType: result.data.mimeType,
+      size: result.data.size,
+      filename: result.data.filename,
+    });
   } catch (error) {
-    console.error("[Uploads] Failed to decode base64", error);
-    return c.json({ success: false, error: "Invalid file data" }, 400);
+    console.error("[Uploads] Unexpected error", error);
+    return c.json({ success: false, error: "Unable to process upload" }, 500);
   }
-
-  if (buffer.length === 0) {
-    return c.json({ success: false, error: "Empty file" }, 400);
-  }
-
-  if (buffer.length > MAX_IMAGE_BYTES) {
-    return c.json({ success: false, error: "File too large" }, 400);
-  }
-
-  ensureUploadDirs();
-
-  const { absolutePath, relativePath } = resolveUploadPath(folder as UploadFolder, fileName);
-
-  try {
-    writeFileSync(absolutePath, buffer);
-    chmodSync(absolutePath, 0o644);
-  } catch (error) {
-    console.error("[Uploads] Failed to persist file", error);
-    return c.json({ success: false, error: "Unable to save file" }, 500);
-  }
-
-  const url = publicBaseUrl ? `${publicBaseUrl}${relativePath}` : relativePath;
-
-  return c.json({
-    success: true,
-    path: relativePath,
-    url,
-    mimeType,
-    size: buffer.length,
-    folder,
-  });
 });
 
 app.post("/api/auth/login", async (c) => {

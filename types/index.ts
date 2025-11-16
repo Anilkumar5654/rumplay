@@ -194,6 +194,8 @@ export interface UploadProgress {
   message: string;
 }
 
+export type UploadFolder = 'profiles' | 'thumbnails' | 'videos' | 'shorts' | 'banners';
+
 export interface VideoUploadData {
   title: string;
   description: string;
