@@ -1,94 +1,112 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, Alert } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit, LogOut } from "lucide-react-native";
-import VideoEditModal from "../../components/VideoEditModal";
-import { Video } from "../../types";
+import {
+  Settings,
+  History,
+  ThumbsUp,
+  Bookmark,
+  ListVideo,
+  LogOut,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react-native";
 import { theme } from "../../constants/theme";
 import { useAppState } from "../../contexts/AppStateContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getEnvApiRootUrl } from "@/utils/env";
 import { useProfileData } from "@/hooks/useProfileData";
 
-const { width } = Dimensions.get("window");
+type ChannelApiPayload = {
+  id: string;
+  name: string;
+  handle?: string | null;
+  avatar?: string | null;
+  banner?: string | null;
+  description?: string | null;
+};
+
+type ChannelResponse = {
+  success: boolean;
+  channel?: ChannelApiPayload;
+  error?: string;
+  message?: string;
+};
+
+type ChannelDetails = {
+  id: string;
+  name: string;
+  handle: string | null;
+  avatar: string;
+  banner: string;
+  description: string;
+};
+
 const FALLBACK_AVATAR_URI = "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" as const;
+
+const parseChannelJson = (input: string): ChannelResponse => {
+  try {
+    return JSON.parse(input) as ChannelResponse;
+  } catch (error) {
+    console.error("[ProfileScreen] parseChannelJson error", error, input.slice(0, 120));
+    throw new Error("Server returned invalid JSON response");
+  }
+};
+
+const toAbsoluteUrl = (value: string | null | undefined, baseUrl: string): string => {
+  if (!value || value.length === 0) {
+    return "";
+  }
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+  if (value.startsWith("/")) {
+    return `${baseUrl}${value}`;
+  }
+  return `${baseUrl}/${value}`;
+};
+
+const mapChannelData = (channel: ChannelApiPayload, baseUrl: string): ChannelDetails => {
+  return {
+    id: channel.id,
+    name: channel.name,
+    handle: channel.handle ?? null,
+    avatar: toAbsoluteUrl(channel.avatar ?? "", baseUrl),
+    banner: toAbsoluteUrl(channel.banner ?? "", baseUrl),
+    description: channel.description ?? "",
+  };
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, channels, videos } = useAppState();
+  const { currentUser } = useAppState();
   const { authUser, isAuthenticated, isAuthLoading, roleDestination, logout, authToken } = useAuth();
   const { profile, isProfileLoading, refreshProfile } = useProfileData();
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [showMyVideos, setShowMyVideos] = useState(false);
-  const [myUploadedVideos, setMyUploadedVideos] = useState<any[]>([]);
 
-  const fetchMyVideos = useCallback(async () => {
-    const apiRoot = getEnvApiRootUrl();
-    if (!authToken) {
-      return;
-    }
+  const [channelDetails, setChannelDetails] = useState<ChannelDetails | null>(null);
+  const [channelError, setChannelError] = useState<string | null>(null);
+  const [isChannelLoading, setIsChannelLoading] = useState(false);
+  const [isCreatingChannel, setIsCreatingChannel] = useState(false);
 
-    try {
-      const response = await fetch(`${apiRoot}/user/uploads`, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.videos) {
-        setMyUploadedVideos(data.videos);
-      }
-    } catch (error) {
-      console.error("Error fetching my videos:", error);
-    }
-  }, [authToken]);
+  const apiRoot = useMemo(() => getEnvApiRootUrl(), []);
+  const apiBaseUrl = useMemo(() => apiRoot.replace("/api", ""), [apiRoot]);
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
       router.replace("/login");
     }
   }, [isAuthenticated, isAuthLoading, router]);
-
-  useEffect(() => {
-    if (isAuthenticated && authUser) {
-      refreshProfile();
-      fetchMyVideos();
-    }
-  }, [isAuthenticated, authUser, refreshProfile, fetchMyVideos]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (isAuthenticated && authUser) {
-        console.log("Profile screen focused, refreshing profile data");
-        refreshProfile();
-      }
-    }, [isAuthenticated, authUser, refreshProfile])
-  );
-
-  const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-            router.replace("/login");
-          },
-        },
-      ]
-    );
-  };
 
   const activeUser = useMemo(() => {
     if (profile) {
@@ -100,55 +118,136 @@ export default function ProfileScreen() {
     return currentUser;
   }, [profile, authUser, currentUser]);
 
-  const userChannel = activeUser.channelId
-    ? channels.find((ch) => ch.id === activeUser.channelId)
-    : null;
-
-  const myVideos = useMemo(() => {
-    if (myUploadedVideos.length > 0) {
-      const apiRoot = getEnvApiRootUrl();
-      const apiBaseUrl = apiRoot.replace("/api", "");
-      return myUploadedVideos.map((v): Video => ({
-        id: v.id,
-        title: v.title,
-        description: v.description || "",
-        thumbnail: v.thumbnail ? `${apiBaseUrl}${v.thumbnail}` : "",
-        videoUrl: v.video_url ? `${apiBaseUrl}${v.video_url}` : "",
-        channelId: v.channel_id || "",
-        channelName: v.channel_name || "",
-        channelAvatar: v.channel_avatar ? `${apiBaseUrl}${v.channel_avatar}` : "",
-        views: parseInt(v.views) || 0,
-        likes: parseInt(v.likes) || 0,
-        dislikes: parseInt(v.dislikes) || 0,
-        uploadDate: v.created_at || new Date().toISOString(),
-        duration: parseInt(v.duration) || 0,
-        category: v.category || "Other",
-        tags: v.tags ? (Array.isArray(v.tags) ? v.tags : v.tags.split(",")) : [],
-        comments: [],
-        isShort: v.is_short === 1 || v.is_short === true,
-        isLive: false,
-        visibility: (v.privacy || "public") as "public" | "private" | "unlisted" | "scheduled",
-        uploaderId: v.user_id,
-      }));
+  const fetchChannelDetails = useCallback(async () => {
+    const hasChannel = Boolean(activeUser.channelId);
+    if (!authToken || !hasChannel) {
+      setChannelDetails(null);
+      setChannelError(null);
+      return;
     }
-    return videos.filter((v) => v.uploaderId === activeUser.id || v.channelId === activeUser.channelId);
-  }, [myUploadedVideos, videos, activeUser.id, activeUser.channelId]);
 
-  const myShorts = myVideos.filter((v) => v.isShort);
-  const myRegularVideos = myVideos.filter((v) => !v.isShort);
+    setIsChannelLoading(true);
+    setChannelError(null);
 
-  const roleAction = useMemo(() => {
-    switch (activeUser.role) {
-      case "superadmin":
-        return { label: "Admin Area", route: "/super-admin" };
-      case "admin":
-        return { label: "Control Panel", route: "/admin-dashboard" };
-      case "creator":
-        return { label: "Creator Studio", route: "/creator-studio" };
-      default:
-        return null;
+    const endpoints: string[] = [`${apiRoot}/channel/my`];
+    if (activeUser.channelId) {
+      endpoints.push(`${apiRoot}/channel/${activeUser.channelId}`);
     }
-  }, [activeUser.role]);
+
+    let latestError: string | null = null;
+
+    for (const endpoint of endpoints) {
+      try {
+        console.log("[ProfileScreen] GET", endpoint);
+        const response = await fetch(endpoint, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+        const raw = await response.text();
+        console.log("[ProfileScreen] channel response", raw.slice(0, 160));
+        const data = parseChannelJson(raw);
+        if (!response.ok || !data.success || !data.channel) {
+          throw new Error(data.error ?? data.message ?? `Request failed with status ${response.status}`);
+        }
+        const mapped = mapChannelData(data.channel, apiBaseUrl);
+        setChannelDetails(mapped);
+        setChannelError(null);
+        return;
+      } catch (error) {
+        latestError = error instanceof Error ? error.message : "Unable to load channel details";
+        console.warn("[ProfileScreen] fetchChannelDetails failed", endpoint, latestError);
+      }
+    }
+
+    setChannelDetails(null);
+    setChannelError(latestError);
+  }, [activeUser.channelId, apiRoot, apiBaseUrl, authToken]);
+
+  const handleCreateChannel = useCallback(async () => {
+    if (!authToken) {
+      Alert.alert("Login required", "Please login to create your channel.", [
+        {
+          text: "Go to Login",
+          onPress: () => router.push("/login"),
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]);
+      return;
+    }
+
+    setIsCreatingChannel(true);
+    setChannelError(null);
+
+    const endpoint = `${apiRoot}/channel/create-auto`;
+    console.log("[ProfileScreen] POST", endpoint);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      const raw = await response.text();
+      console.log("[ProfileScreen] create channel response", raw.slice(0, 160));
+      const data = parseChannelJson(raw);
+      if (!response.ok || !data.success || !data.channel) {
+        throw new Error(data.error ?? data.message ?? `Request failed with status ${response.status}`);
+      }
+      const mapped = mapChannelData(data.channel, apiBaseUrl);
+      setChannelDetails(mapped);
+      Alert.alert("Channel created", data.message ?? "Your channel is live now!");
+      await refreshProfile();
+      await fetchChannelDetails();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create channel";
+      console.error("[ProfileScreen] handleCreateChannel error", message, error);
+      setChannelError(message);
+      Alert.alert("Channel error", message);
+    } finally {
+      setIsCreatingChannel(false);
+    }
+  }, [apiRoot, authToken, apiBaseUrl, fetchChannelDetails, refreshProfile, router]);
+
+  useEffect(() => {
+    if (activeUser.channelId) {
+      fetchChannelDetails();
+    } else {
+      setChannelDetails(null);
+      setChannelError(null);
+    }
+  }, [activeUser.channelId, fetchChannelDetails]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated && authUser) {
+        console.log("Profile screen focused, refreshing profile data");
+        refreshProfile();
+        fetchChannelDetails();
+      }
+    }, [isAuthenticated, authUser, refreshProfile, fetchChannelDetails])
+  );
+
+  const handleLogout = useCallback(() => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          router.replace("/login");
+        },
+      },
+    ]);
+  }, [logout, router]);
 
   const resolvedAvatar = useMemo(() => {
     if (profile?.avatar && profile.avatar.length > 0) {
@@ -163,72 +262,32 @@ export default function ProfileScreen() {
     return FALLBACK_AVATAR_URI;
   }, [profile?.avatar, authUser?.avatar, activeUser.avatar]);
 
+  const roleAction = useMemo(() => {
+    switch (activeUser.role) {
+      case "superadmin":
+        return { label: "Admin Area", route: "/super-admin" as const };
+      case "admin":
+        return { label: "Control Panel", route: "/admin-dashboard" as const };
+      case "creator":
+        return { label: "Creator Studio", route: "/creator-studio" as const };
+      default:
+        if (activeUser.channelId) {
+          const label = channelDetails?.name ?? "View My Channel";
+          const route = `/channel/${activeUser.channelId}` as const;
+          return { label, route };
+        }
+        return null;
+    }
+  }, [activeUser.role, activeUser.channelId, channelDetails?.name]);
+
   const menuItems = [
-    { icon: VideoIcon, label: "My Videos", count: myVideos.length, route: null, onPress: () => setShowMyVideos(!showMyVideos) },
-    { icon: History, label: "History", count: activeUser.watchHistory?.length || 0, route: null },
-    { icon: ThumbsUp, label: "Liked Videos", count: activeUser.likedVideos?.length || 0, route: null },
-    { icon: Bookmark, label: "Saved Videos", count: activeUser.savedVideos?.length || 0, route: null },
-    { icon: ListVideo, label: "Playlists", count: 0, route: null },
+    { icon: History, label: "History", count: activeUser.watchHistory?.length || 0, route: null, onPress: null },
+    { icon: ThumbsUp, label: "Liked Videos", count: activeUser.likedVideos?.length || 0, route: null, onPress: null },
+    { icon: Bookmark, label: "Saved Videos", count: activeUser.savedVideos?.length || 0, route: null, onPress: null },
+    { icon: ListVideo, label: "Playlists", count: 0, route: null, onPress: null },
     { icon: Settings, label: "Settings", count: null, route: "/settings", onPress: null },
     { icon: LogOut, label: "Logout", count: null, route: null, onPress: handleLogout },
-  ];
-
-  const handleEditVideo = (video: Video) => {
-    setSelectedVideo(video);
-    setEditModalVisible(true);
-  };
-
-  const formatViews = (views: number): string => {
-    if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
-    if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
-    return views.toString();
-  };
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const renderVideoItem = (video: Video) => (
-    <TouchableOpacity
-      key={video.id}
-      style={styles.videoItem}
-      onPress={() => router.push(`/video/${video.id}`)}
-    >
-      <View style={styles.videoThumbnailContainer}>
-        <Image source={{ uri: video.thumbnail }} style={styles.videoItemThumbnail} />
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{formatDuration(video.duration)}</Text>
-        </View>
-        {video.visibility !== "public" && (
-          <View style={styles.visibilityBadge}>
-            <Text style={styles.visibilityBadgeText}>
-              {video.visibility?.toUpperCase()}
-            </Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.videoItemInfo}>
-        <Text style={styles.videoItemTitle} numberOfLines={2}>
-          {video.title}
-        </Text>
-        <Text style={styles.videoItemStats}>
-          {formatViews(video.views)} views • {video.likes} likes
-        </Text>
-        <TouchableOpacity
-          style={styles.editVideoButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleEditVideo(video);
-          }}
-        >
-          <Edit color={theme.colors.primary} size={16} />
-          <Text style={styles.editVideoText}>Edit</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+  ] as const;
 
   if (isAuthLoading || isProfileLoading) {
     return (
@@ -238,6 +297,61 @@ export default function ProfileScreen() {
       </View>
     );
   }
+
+  const renderChannelSection = () => {
+    if (activeUser.channelId) {
+      const isDisabled = isChannelLoading || Boolean(channelError);
+      const avatarSource = channelDetails?.avatar && channelDetails.avatar.length > 0 ? channelDetails.avatar : resolvedAvatar;
+      const subtitle = channelDetails?.handle ?? (channelError ?? "Tap to open your channel");
+
+      return (
+        <TouchableOpacity
+          style={[styles.channelCard, isDisabled && styles.channelCardDisabled]}
+          onPress={() => router.push(`/channel/${activeUser.channelId}`)}
+          disabled={isChannelLoading}
+          testID="view-channel-button"
+        >
+          <View style={styles.channelCardRow}>
+            <Image source={{ uri: avatarSource }} style={styles.channelAvatar} />
+            <View style={styles.channelCardInfo}>
+              <Text style={styles.channelCardName}>{channelDetails?.name ?? "View My Channel"}</Text>
+              <Text style={styles.channelCardHandle}>{subtitle}</Text>
+              {isChannelLoading ? (
+                <Text style={styles.channelCardHint}>Refreshing channel...</Text>
+              ) : (
+                <Text style={styles.channelCardHint}>Open channel profile</Text>
+              )}
+            </View>
+            <ArrowRight color={theme.colors.text} size={22} />
+          </View>
+          {channelError ? <Text style={styles.channelErrorText}>{channelError}</Text> : null}
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <View style={styles.createChannelCard}>
+        <View style={styles.createChannelBadge}>
+          <Sparkles color={theme.colors.primary} size={22} />
+        </View>
+        <Text style={styles.createChannelTitle}>Launch your channel</Text>
+        <Text style={styles.createChannelSubtitle}>Share your videos, build a community, and unlock creator tools.</Text>
+        <TouchableOpacity
+          style={styles.createChannelButton}
+          onPress={handleCreateChannel}
+          disabled={isCreatingChannel}
+          testID="create-channel-button"
+        >
+          {isCreatingChannel ? (
+            <ActivityIndicator size="small" color={theme.colors.surface} />
+          ) : (
+            <Text style={styles.createChannelButtonText}>Create Channel</Text>
+          )}
+        </TouchableOpacity>
+        {channelError ? <Text style={styles.channelErrorText}>{channelError}</Text> : null}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -267,19 +381,15 @@ export default function ProfileScreen() {
           {roleAction && (
             <TouchableOpacity
               style={styles.roleActionButton}
-              onPress={() => router.push((roleDestination ?? roleAction.route) as any)}
+              onPress={() => {
+                const targetRoute = roleAction.route ?? roleDestination;
+                if (targetRoute) {
+                  router.push(targetRoute as any);
+                }
+              }}
               testID="role-action-button"
             >
               <Text style={styles.roleActionLabel}>{roleAction.label}</Text>
-            </TouchableOpacity>
-          )}
-
-          {userChannel && (
-            <TouchableOpacity
-              style={styles.channelButton}
-              onPress={() => router.push(`/channel/${userChannel.id}`)}
-            >
-              <Text style={styles.channelButtonText}>View My Channel</Text>
             </TouchableOpacity>
           )}
 
@@ -287,6 +397,8 @@ export default function ProfileScreen() {
             <Text style={styles.phoneText}>{activeUser.phone}</Text>
           )}
         </View>
+
+        <View style={styles.channelSection}>{renderChannelSection()}</View>
 
         <View style={styles.statsSection}>
           <View style={styles.statItem}>
@@ -307,65 +419,29 @@ export default function ProfileScreen() {
           {menuItems.map((item) => {
             const Icon = item.icon;
             return (
-              <View key={item.label}>
-                <TouchableOpacity 
-                  style={styles.menuItem}
-                  onPress={() => {
-                    if (item.onPress) {
-                      item.onPress();
-                    } else if (item.route) {
-                      router.push(item.route as any);
-                    }
-                  }}
-                >
-                  <View style={styles.menuItemLeft}>
-                    <Icon color={theme.colors.text} size={24} />
-                    <Text style={styles.menuItemLabel}>{item.label}</Text>
-                  </View>
-                  {item.count !== null && (
-                    <Text style={styles.menuItemCount}>{item.count}</Text>
-                  )}
-                </TouchableOpacity>
-                
-                {item.label === "My Videos" && showMyVideos && myVideos.length > 0 && (
-                  <View style={styles.myVideosSection}>
-                    {myRegularVideos.length > 0 && (
-                      <View style={styles.videoTypeSection}>
-                        <Text style={styles.videoTypeTitle}>Videos ({myRegularVideos.length})</Text>
-                        <View style={styles.videosGrid}>
-                          {myRegularVideos.map((video) => renderVideoItem(video))}
-                        </View>
-                      </View>
-                    )}
-                    
-                    {myShorts.length > 0 && (
-                      <View style={styles.videoTypeSection}>
-                        <Text style={styles.videoTypeTitle}>Shorts ({myShorts.length})</Text>
-                        <View style={styles.videosGrid}>
-                          {myShorts.map((video) => renderVideoItem(video))}
-                        </View>
-                      </View>
-                    )}
-                  </View>
+              <TouchableOpacity
+                key={item.label}
+                style={styles.menuItem}
+                onPress={() => {
+                  if (item.onPress) {
+                    item.onPress();
+                  } else if (item.route) {
+                    router.push(item.route as any);
+                  }
+                }}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Icon color={theme.colors.text} size={24} />
+                  <Text style={styles.menuItemLabel}>{item.label}</Text>
+                </View>
+                {item.count !== null && (
+                  <Text style={styles.menuItemCount}>{item.count}</Text>
                 )}
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
       </ScrollView>
-
-      <VideoEditModal
-        visible={editModalVisible}
-        video={selectedVideo}
-        onClose={() => {
-          setEditModalVisible(false);
-          setSelectedVideo(null);
-        }}
-        onUpdate={() => {
-          setEditModalVisible(false);
-          setSelectedVideo(null);
-        }}
-      />
     </View>
   );
 }
@@ -457,22 +533,95 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     fontWeight: "600" as const,
   },
-  channelButton: {
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radii.lg,
-    marginTop: theme.spacing.sm,
-  },
-  channelButtonText: {
-    color: theme.colors.text,
-    fontSize: theme.fontSizes.sm,
-    fontWeight: "600" as const,
-  },
   phoneText: {
     fontSize: theme.fontSizes.sm,
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.xs,
+  },
+  channelSection: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.lg,
+  },
+  createChannelCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.xl,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  createChannelBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: theme.colors.surfaceLight,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  createChannelTitle: {
+    fontSize: theme.fontSizes.xl,
+    fontWeight: "700" as const,
+    color: theme.colors.text,
+  },
+  createChannelSubtitle: {
+    fontSize: theme.fontSizes.sm,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+  },
+  createChannelButton: {
+    marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    alignItems: "center" as const,
+  },
+  createChannelButtonText: {
+    color: theme.colors.surface,
+    fontSize: theme.fontSizes.md,
+    fontWeight: "600" as const,
+  },
+  channelCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.xl,
+    padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  channelCardDisabled: {
+    opacity: 0.9,
+  },
+  channelCardRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: theme.spacing.md,
+  },
+  channelAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.border,
+  },
+  channelCardInfo: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  channelCardName: {
+    fontSize: theme.fontSizes.lg,
+    fontWeight: "700" as const,
+    color: theme.colors.text,
+  },
+  channelCardHandle: {
+    fontSize: theme.fontSizes.sm,
+    color: theme.colors.textSecondary,
+  },
+  channelCardHint: {
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
+  },
+  channelErrorText: {
+    marginTop: theme.spacing.sm,
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.error,
   },
   statsSection: {
     flexDirection: "row" as const,
@@ -517,90 +666,5 @@ const styles = StyleSheet.create({
   menuItemCount: {
     fontSize: theme.fontSizes.sm,
     color: theme.colors.textSecondary,
-  },
-  myVideosSection: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-  },
-  videoTypeSection: {
-    marginBottom: theme.spacing.lg,
-  },
-  videoTypeTitle: {
-    fontSize: theme.fontSizes.md,
-    fontWeight: "600" as const,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-  },
-  videosGrid: {
-    flexDirection: "row" as const,
-    flexWrap: "wrap" as const,
-    gap: theme.spacing.sm,
-  },
-  videoItem: {
-    width: (width - theme.spacing.md * 3) / 2,
-    marginBottom: theme.spacing.md,
-  },
-  videoThumbnailContainer: {
-    position: "relative" as const,
-  },
-  videoItemThumbnail: {
-    width: "100%",
-    height: 100,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.border,
-  },
-  durationBadge: {
-    position: "absolute" as const,
-    bottom: theme.spacing.xs,
-    right: theme.spacing.xs,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: theme.radii.sm,
-  },
-  durationText: {
-    color: "#FFFFFF",
-    fontSize: theme.fontSizes.xs,
-    fontWeight: "600" as const,
-  },
-  visibilityBadge: {
-    position: "absolute" as const,
-    top: theme.spacing.xs,
-    left: theme.spacing.xs,
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.sm,
-  },
-  visibilityBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "bold" as const,
-  },
-  videoItemInfo: {
-    marginTop: theme.spacing.xs,
-  },
-  videoItemTitle: {
-    fontSize: theme.fontSizes.sm,
-    fontWeight: "500" as const,
-    color: theme.colors.text,
-    marginBottom: 2,
-  },
-  videoItemStats: {
-    fontSize: theme.fontSizes.xs,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.xs,
-  },
-  editVideoButton: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 4,
-    paddingVertical: 4,
-  },
-  editVideoText: {
-    fontSize: theme.fontSizes.xs,
-    color: theme.colors.primary,
-    fontWeight: "600" as const,
   },
 });
