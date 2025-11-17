@@ -10,9 +10,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 define('DB_HOST', 'localhost');
-define('DB_USER', 'your_db_user');
-define('DB_PASS', 'your_db_pass');
-define('DB_NAME', 'your_db_name');
+define('DB_USER', 'u449340066_rumplay');
+define('DB_PASS', '6>E/UCiT;AYh');
+define('DB_NAME', 'u449340066_rumplay');
 
 function getDB() {
     static $db = null;

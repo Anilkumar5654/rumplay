@@ -1,13 +1,12 @@
 # Frontend API Base URL
-# IMPORTANT: This should point to your dev server when developing locally
-# The Rork CLI automatically starts the backend API at the same URL as the frontend
-# Default format: http://localhost:8081 or your ngrok/tunnel URL
-# When deployed, use: https://moviedbr.com
-EXPO_PUBLIC_API_URL="http://localhost:8081"
+# IMPORTANT: This points to your Hostinger backend
+# Your PHP API files are located at https://moviedbr.com/api/
+EXPO_PUBLIC_API_URL="https://moviedbr.com"
 
-# Backend Database Configuration (Hostinger Remote MySQL)
-# REMOTE MySQL configuration - backend runs locally but connects to Hostinger MySQL
-DB_HOST="srv1616.hstgr.io"
+# Backend Database Configuration (Hostinger MySQL)
+# Used by PHP API files on your Hostinger server
+# In PHP files, use 'localhost' for DB_HOST since PHP runs on same server as MySQL
+DB_HOST="localhost"
 DB_USER="u449340066_rumplay"
 DB_PASSWORD="6>E/UCiT;AYh"
 DB_NAME="u449340066_rumplay"
