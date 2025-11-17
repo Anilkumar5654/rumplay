@@ -1,7 +1,7 @@
 # Frontend API Base URL
 # IMPORTANT: This points to your Hostinger backend
 # Your PHP API files are located at https://moviedbr.com/api/
-EXPO_PUBLIC_API_URL="https://moviedbr.com"
+EXPO_PUBLIC_API_URL="https://moviedbr.com/api"
 
 # Backend Database Configuration (Hostinger MySQL)
 # Used by PHP API files on your Hostinger server
