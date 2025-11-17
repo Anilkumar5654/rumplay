@@ -105,7 +105,7 @@ export default function EditProfileScreen() {
         } as any);
       }
 
-      const response = await fetch(`${apiRoot}/user/profile/upload`, {
+      const response = await fetch(`${apiRoot}/user/edit_profile`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -130,14 +130,14 @@ export default function EditProfileScreen() {
         throw new Error("Invalid response from server. Please check your API endpoint.");
       }
 
-      if (data.success && data.profile_pic_url) {
+      if (data.success && data.user) {
         const apiBaseUrl = apiRoot.replace('/api', '');
-        const fullProfilePicUrl = data.profile_pic_url.startsWith('http') 
-          ? data.profile_pic_url 
-          : `${apiBaseUrl}${data.profile_pic_url}`;
+        const avatarUrl = data.user.avatar?.startsWith('/uploads/') 
+          ? `${apiBaseUrl}${data.user.avatar}` 
+          : data.user.avatar;
         
-        console.log("Setting profile pic to:", fullProfilePicUrl);
-        setProfilePic(fullProfilePicUrl);
+        console.log("Profile picture updated to:", avatarUrl);
+        setProfilePic(avatarUrl || "");
         
         const refreshResult = await refreshAuthUser();
         console.log("Auth refresh result:", refreshResult);
@@ -171,7 +171,7 @@ export default function EditProfileScreen() {
         phone: phone,
       });
       
-      const response = await fetch(`${apiRoot}/user/update`, {
+      const response = await fetch(`${apiRoot}/user/edit_profile`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

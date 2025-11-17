@@ -57,7 +57,7 @@ export default function ProfileScreen() {
       
       console.log("Fetching profile for user:", authUser.id);
       
-      const response = await fetch(`${apiRoot}/user/details?user_id=${authUser.id}`, {
+      const response = await fetch(`${apiRoot}/user/my_profile`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
