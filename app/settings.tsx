@@ -253,6 +253,7 @@ export default function SettingsScreen() {
             >
               {ACCENT_COLORS.map((color) => {
                 const isActive = localSettings.accentColor === color.value;
+                const colorBg = color.value;
                 return (
                   <TouchableOpacity
                     key={color.value}
@@ -263,7 +264,7 @@ export default function SettingsScreen() {
                     ]}
                     onPress={() => void handleSettingChange("accentColor", color.value)}
                   >
-                    <View style={[styles.colorInner, { backgroundColor: color.value }]} />
+                    <View style={[styles.colorInner, { backgroundColor: colorBg }]} />
                     {isActive && <View style={styles.colorCheck} />}
                   </TouchableOpacity>
                 );
