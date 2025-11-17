@@ -17,7 +17,7 @@ $stmt->execute(['user_id' => $user['id']]);
 $videos = $stmt->fetchAll();
 
 foreach ($videos as &$video) {
-    $video['tags'] = json_decode($video['tags'], true);
+    $video['tags'] = json_decode($video['tags'] ?? '[]', true);
 }
 
 respond(['success' => true, 'videos' => $videos]);

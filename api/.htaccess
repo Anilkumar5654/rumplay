@@ -1,69 +1,34 @@
-# Rumplay - Apache Configuration for API
-# Place this file in public_html/api/.htaccess
+RewriteEngine On
+RewriteBase /api/
 
-# Enable mod_rewrite
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-    RewriteBase /api/
-</IfModule>
+# Handle CORS preflight requests
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=204,L]
 
-# Set correct MIME types for JSON
-<IfModule mod_mime.c>
-    AddType application/json .json
-</IfModule>
+# API routing rules
+RewriteRule ^health$ health.php [L]
 
-# Security Headers
-<IfModule mod_headers.c>
-    # CORS Headers (Allow all origins for development)
-    Header always set Access-Control-Allow-Origin "*"
-    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
-    Header always set Access-Control-Max-Age "3600"
-    
-    # Handle OPTIONS requests
-    RewriteCond %{REQUEST_METHOD} OPTIONS
-    RewriteRule ^(.*)$ $1 [R=200,L]
-    
-    # Security headers
-    Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "DENY"
-    Header always set X-XSS-Protection "1; mode=block"
-</IfModule>
+# Auth routes
+RewriteRule ^auth/register$ auth/register.php [L]
+RewriteRule ^auth/login$ auth/login.php [L]
+RewriteRule ^auth/me$ auth/me.php [L]
+RewriteRule ^auth/logout$ auth/logout.php [L]
 
-# PHP Configuration
-<IfModule mod_php8.c>
-    # Increase upload limits
-    php_value upload_max_filesize 100M
-    php_value post_max_size 100M
-    php_value max_execution_time 300
-    php_value max_input_time 300
-    php_value memory_limit 256M
-    
-    # Error reporting (disable in production)
-    php_value display_errors 1
-    php_value display_startup_errors 1
-    php_value error_reporting E_ALL
-</IfModule>
+# User routes
+RewriteRule ^user/profile$ user/profile.php [L]
+RewriteRule ^user/uploads$ user/uploads.php [L]
 
-# Directory Protection
-<IfModule mod_autoindex.c>
-    Options -Indexes
-</IfModule>
+# Video routes
+RewriteRule ^video/list$ video/list.php [L]
+RewriteRule ^video/details$ video/details.php [L]
+RewriteRule ^video/upload$ video/upload.php [L]
+RewriteRule ^video/like$ video/like.php [L]
+RewriteRule ^video/comment$ video/comment.php [L]
 
-# File Protection
-<FilesMatch "\.(htaccess|htpasswd|ini|log|sh|sql)$">
-    Order Allow,Deny
-    Deny from all
-</FilesMatch>
+# Shorts routes
+RewriteRule ^shorts/list$ shorts/list.php [L]
+RewriteRule ^shorts/upload$ shorts/upload.php [L]
 
-# Cache Control for API responses
-<IfModule mod_expires.c>
-    ExpiresActive Off
-    Header set Cache-Control "no-cache, no-store, must-revalidate"
-    Header set Pragma "no-cache"
-    Header set Expires "0"
-</IfModule>
-
-# Error Documents
-ErrorDocument 404 "API endpoint not found"
-ErrorDocument 500 "Internal server error"
+# Admin routes
+RewriteRule ^admin/users$ admin/users.php [L]
+RewriteRule ^admin/videos$ admin/videos.php [L]

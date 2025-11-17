@@ -171,6 +171,7 @@ export default function ProfileScreen() {
     { icon: ThumbsUp, label: "Liked Videos", count: activeUser.likedVideos?.length || 0, route: null },
     { icon: Bookmark, label: "Saved Videos", count: activeUser.savedVideos?.length || 0, route: null },
     { icon: ListVideo, label: "Playlists", count: 0, route: null },
+    { icon: Settings, label: "Settings", count: null, route: "/settings", onPress: null },
     { icon: LogOut, label: "Logout", count: null, route: null, onPress: handleLogout },
   ];
 

@@ -23,7 +23,6 @@ if (!$user || !verifyPassword($password, $user['password_hash'], $user['password
 }
 
 $token = generateToken();
-$sessionId = generateUUID();
 $expiresAt = date('Y-m-d H:i:s', time() + (30 * 24 * 60 * 60));
 
 $stmt = $db->prepare("
@@ -36,10 +35,8 @@ $stmt->execute([
     'expires_at' => $expiresAt
 ]);
 
-unset($user['password_hash'], $user['password_salt']);
-
 respond([
     'success' => true,
     'token' => $token,
-    'user' => $user
+    'user' => formatUserResponse($user)
 ]);

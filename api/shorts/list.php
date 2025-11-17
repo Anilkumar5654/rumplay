@@ -7,33 +7,39 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $db = getDB();
 
-$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$limit = isset($_GET['limit']) ? min(50, max(1, intval($_GET['limit']))) : 20;
-$offset = ($page - 1) * $limit;
+$limit = $_GET['limit'] ?? 20;
+$offset = $_GET['offset'] ?? 0;
 
 $stmt = $db->prepare("
     SELECT 
         s.*,
-        u.username as author_name,
-        u.profile_pic as author_avatar,
-        c.name as channel_name,
-        c.handle as channel_handle
+        u.id as uploader_id,
+        u.username as uploader_username,
+        u.name as uploader_name,
+        u.profile_pic as uploader_profile_pic
     FROM shorts s
     INNER JOIN users u ON s.user_id = u.id
-    INNER JOIN channels c ON s.channel_id = c.id
     ORDER BY s.created_at DESC
     LIMIT :limit OFFSET :offset
 ");
 
-$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->bindValue('limit', (int)$limit, PDO::PARAM_INT);
+$stmt->bindValue('offset', (int)$offset, PDO::PARAM_INT);
 $stmt->execute();
 
 $shorts = $stmt->fetchAll();
 
+foreach ($shorts as &$short) {
+    $short['uploader'] = [
+        'id' => $short['uploader_id'],
+        'username' => $short['uploader_username'],
+        'name' => $short['uploader_name'],
+        'profile_pic' => $short['uploader_profile_pic']
+    ];
+    unset($short['uploader_id'], $short['uploader_username'], $short['uploader_name'], $short['uploader_profile_pic']);
+}
+
 respond([
     'success' => true,
-    'shorts' => $shorts,
-    'page' => $page,
-    'limit' => $limit
+    'shorts' => $shorts
 ]);

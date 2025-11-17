@@ -7,88 +7,90 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $user = requireAuth();
 
-$title = trim($_POST['title'] ?? '');
+if (!isset($_FILES['video']) || !isset($_POST['title'])) {
+    respond(['success' => false, 'error' => 'Video file and title are required'], 400);
+}
+
+$title = trim($_POST['title']);
 $description = trim($_POST['description'] ?? '');
-$category = trim($_POST['category'] ?? 'General');
-$visibility = $_POST['visibility'] ?? 'public';
-$tags = isset($_POST['tags']) ? (array)$_POST['tags'] : [];
+$category = trim($_POST['category'] ?? 'Other');
+$tags = $_POST['tags'] ?? '';
+$privacy = $_POST['privacy'] ?? 'public';
+$isShort = (int)($_POST['is_short'] ?? 0);
 
 if (empty($title)) {
     respond(['success' => false, 'error' => 'Title is required'], 400);
 }
 
-if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-    respond(['success' => false, 'error' => 'Video file is required'], 400);
+if (!in_array($privacy, ['public', 'private', 'unlisted', 'scheduled'])) {
+    $privacy = 'public';
 }
 
-$uploadDir = '../uploads/videos/';
-if (!is_dir($uploadDir)) {
-    mkdir($uploadDir, 0755, true);
+$uploadDir = '../uploads/';
+if (!file_exists($uploadDir . 'videos')) {
+    mkdir($uploadDir . 'videos', 0755, true);
+}
+if (!file_exists($uploadDir . 'thumbnails')) {
+    mkdir($uploadDir . 'thumbnails', true);
 }
 
-$videoFile = $_FILES['file'];
+$videoFile = $_FILES['video'];
+$allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
+$maxVideoSize = 500 * 1024 * 1024;
+
+if (!in_array($videoFile['type'], $allowedVideoTypes)) {
+    respond(['success' => false, 'error' => 'Invalid video format. Only MP4, MOV, AVI allowed'], 400);
+}
+
+if ($videoFile['size'] > $maxVideoSize) {
+    respond(['success' => false, 'error' => 'Video file too large. Max 500MB'], 400);
+}
+
 $videoExt = pathinfo($videoFile['name'], PATHINFO_EXTENSION);
-$videoName = generateUUID() . '.' . $videoExt;
-$videoPath = $uploadDir . $videoName;
+$videoUuid = generateUUID();
+$videoFilename = $videoUuid . '.' . $videoExt;
+$videoPath = $uploadDir . 'videos/' . $videoFilename;
 
 if (!move_uploaded_file($videoFile['tmp_name'], $videoPath)) {
     respond(['success' => false, 'error' => 'Failed to upload video'], 500);
 }
 
 $thumbnailUrl = '';
-if (isset($_FILES['thumbnail']) && $_FILES['thumbnail']['error'] === UPLOAD_ERR_OK) {
-    $thumbDir = '../uploads/thumbnails/';
-    if (!is_dir($thumbDir)) {
-        mkdir($thumbDir, 0755, true);
-    }
+if (isset($_FILES['thumbnail'])) {
+    $thumbnailFile = $_FILES['thumbnail'];
+    $allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    $maxImageSize = 5 * 1024 * 1024;
     
-    $thumbFile = $_FILES['thumbnail'];
-    $thumbExt = pathinfo($thumbFile['name'], PATHINFO_EXTENSION);
-    $thumbName = generateUUID() . '.' . $thumbExt;
-    $thumbPath = $thumbDir . $thumbName;
-    
-    if (move_uploaded_file($thumbFile['tmp_name'], $thumbPath)) {
-        $thumbnailUrl = 'https://moviedbr.com/uploads/thumbnails/' . $thumbName;
+    if (in_array($thumbnailFile['type'], $allowedImageTypes) && $thumbnailFile['size'] <= $maxImageSize) {
+        $thumbExt = pathinfo($thumbnailFile['name'], PATHINFO_EXTENSION);
+        $thumbFilename = $videoUuid . '.' . $thumbExt;
+        $thumbPath = $uploadDir . 'thumbnails/' . $thumbFilename;
+        
+        if (move_uploaded_file($thumbnailFile['tmp_name'], $thumbPath)) {
+            $thumbnailUrl = 'https://moviedbr.com/uploads/thumbnails/' . $thumbFilename;
+        }
     }
 }
 
 if (empty($thumbnailUrl)) {
-    $thumbnailUrl = 'https://moviedbr.com/uploads/thumbnails/default.jpg';
+    $thumbnailUrl = 'https://via.placeholder.com/640x360.png?text=Video+Thumbnail';
 }
 
-$videoUrl = 'https://moviedbr.com/uploads/videos/' . $videoName;
-$videoId = generateUUID();
+$videoUrl = 'https://moviedbr.com/uploads/videos/' . $videoFilename;
+$tagsArray = array_filter(array_map('trim', explode(',', $tags)));
+$tagsJson = json_encode($tagsArray);
 
 $db = getDB();
-
-$channelStmt = $db->prepare("SELECT id FROM channels WHERE user_id = :user_id LIMIT 1");
-$channelStmt->execute(['user_id' => $user['id']]);
-$channel = $channelStmt->fetch();
-
-if (!$channel) {
-    $channelId = generateUUID();
-    $channelStmt = $db->prepare("
-        INSERT INTO channels (id, user_id, name, handle, description, created_at)
-        VALUES (:id, :user_id, :name, :handle, :description, NOW())
-    ");
-    $channelStmt->execute([
-        'id' => $channelId,
-        'user_id' => $user['id'],
-        'name' => $user['name'] . "'s Channel",
-        'handle' => '@' . $user['username'],
-        'description' => 'Welcome to my channel'
-    ]);
-} else {
-    $channelId = $channel['id'];
-}
+$videoId = generateUUID();
+$channelId = $user['channel_id'] ?? generateUUID();
 
 $stmt = $db->prepare("
     INSERT INTO videos (
-        id, user_id, channel_id, title, description, video_url, 
-        thumbnail, privacy, category, tags, created_at
+        id, user_id, channel_id, title, description, video_url, thumbnail,
+        privacy, category, tags, is_short, created_at
     ) VALUES (
-        :id, :user_id, :channel_id, :title, :description, :video_url,
-        :thumbnail, :privacy, :category, :tags, NOW()
+        :id, :user_id, :channel_id, :title, :description, :video_url, :thumbnail,
+        :privacy, :category, :tags, :is_short, NOW()
     )
 ");
 
@@ -100,18 +102,16 @@ $stmt->execute([
     'description' => $description,
     'video_url' => $videoUrl,
     'thumbnail' => $thumbnailUrl,
-    'privacy' => $visibility,
+    'privacy' => $privacy,
     'category' => $category,
-    'tags' => json_encode($tags)
+    'tags' => $tagsJson,
+    'is_short' => $isShort
 ]);
 
 respond([
     'success' => true,
-    'message' => 'Video uploaded successfully',
-    'video' => [
-        'id' => $videoId,
-        'title' => $title,
-        'video_url' => $videoUrl,
-        'thumbnail' => $thumbnailUrl
-    ]
+    'video_id' => $videoId,
+    'video_url' => $videoUrl,
+    'thumbnail_url' => $thumbnailUrl,
+    'message' => 'Video uploaded successfully'
 ]);

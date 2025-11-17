@@ -7,79 +7,71 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $user = requireAuth();
 
+if (!isset($_FILES['video'])) {
+    respond(['success' => false, 'error' => 'Video file is required'], 400);
+}
+
 $description = trim($_POST['description'] ?? '');
 
-if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-    respond(['success' => false, 'error' => 'Short video file is required'], 400);
+$uploadDir = '../uploads/';
+if (!file_exists($uploadDir . 'shorts')) {
+    mkdir($uploadDir . 'shorts', 0755, true);
+}
+if (!file_exists($uploadDir . 'thumbnails')) {
+    mkdir($uploadDir . 'thumbnails', 0755, true);
 }
 
-$uploadDir = '../uploads/shorts/';
-if (!is_dir($uploadDir)) {
-    mkdir($uploadDir, 0755, true);
+$videoFile = $_FILES['video'];
+$allowedVideoTypes = ['video/mp4', 'video/quicktime'];
+$maxVideoSize = 100 * 1024 * 1024;
+
+if (!in_array($videoFile['type'], $allowedVideoTypes)) {
+    respond(['success' => false, 'error' => 'Invalid video format. Only MP4, MOV allowed'], 400);
 }
 
-$shortFile = $_FILES['file'];
-$shortExt = pathinfo($shortFile['name'], PATHINFO_EXTENSION);
-$shortName = generateUUID() . '.' . $shortExt;
-$shortPath = $uploadDir . $shortName;
+if ($videoFile['size'] > $maxVideoSize) {
+    respond(['success' => false, 'error' => 'Video file too large. Max 100MB'], 400);
+}
 
-if (!move_uploaded_file($shortFile['tmp_name'], $shortPath)) {
-    respond(['success' => false, 'error' => 'Failed to upload short'], 500);
+$videoExt = pathinfo($videoFile['name'], PATHINFO_EXTENSION);
+$videoUuid = generateUUID();
+$videoFilename = $videoUuid . '.' . $videoExt;
+$videoPath = $uploadDir . 'shorts/' . $videoFilename;
+
+if (!move_uploaded_file($videoFile['tmp_name'], $videoPath)) {
+    respond(['success' => false, 'error' => 'Failed to upload video'], 500);
 }
 
 $thumbnailUrl = '';
-if (isset($_FILES['thumbnail']) && $_FILES['thumbnail']['error'] === UPLOAD_ERR_OK) {
-    $thumbDir = '../uploads/thumbnails/';
-    if (!is_dir($thumbDir)) {
-        mkdir($thumbDir, 0755, true);
-    }
+if (isset($_FILES['thumbnail'])) {
+    $thumbnailFile = $_FILES['thumbnail'];
+    $allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    $maxImageSize = 5 * 1024 * 1024;
     
-    $thumbFile = $_FILES['thumbnail'];
-    $thumbExt = pathinfo($thumbFile['name'], PATHINFO_EXTENSION);
-    $thumbName = generateUUID() . '.' . $thumbExt;
-    $thumbPath = $thumbDir . $thumbName;
-    
-    if (move_uploaded_file($thumbFile['tmp_name'], $thumbPath)) {
-        $thumbnailUrl = 'https://moviedbr.com/uploads/thumbnails/' . $thumbName;
+    if (in_array($thumbnailFile['type'], $allowedImageTypes) && $thumbnailFile['size'] <= $maxImageSize) {
+        $thumbExt = pathinfo($thumbnailFile['name'], PATHINFO_EXTENSION);
+        $thumbFilename = $videoUuid . '.' . $thumbExt;
+        $thumbPath = $uploadDir . 'thumbnails/' . $thumbFilename;
+        
+        if (move_uploaded_file($thumbnailFile['tmp_name'], $thumbPath)) {
+            $thumbnailUrl = 'https://moviedbr.com/uploads/thumbnails/' . $thumbFilename;
+        }
     }
 }
 
 if (empty($thumbnailUrl)) {
-    $thumbnailUrl = 'https://moviedbr.com/uploads/thumbnails/default.jpg';
+    $thumbnailUrl = 'https://via.placeholder.com/720x1280.png?text=Short';
 }
 
-$shortUrl = 'https://moviedbr.com/uploads/shorts/' . $shortName;
-$shortId = generateUUID();
+$shortUrl = 'https://moviedbr.com/uploads/shorts/' . $videoFilename;
 
 $db = getDB();
-
-$channelStmt = $db->prepare("SELECT id FROM channels WHERE user_id = :user_id LIMIT 1");
-$channelStmt->execute(['user_id' => $user['id']]);
-$channel = $channelStmt->fetch();
-
-if (!$channel) {
-    $channelId = generateUUID();
-    $channelStmt = $db->prepare("
-        INSERT INTO channels (id, user_id, name, handle, description, created_at)
-        VALUES (:id, :user_id, :name, :handle, :description, NOW())
-    ");
-    $channelStmt->execute([
-        'id' => $channelId,
-        'user_id' => $user['id'],
-        'name' => $user['name'] . "'s Channel",
-        'handle' => '@' . $user['username'],
-        'description' => 'Welcome to my channel'
-    ]);
-} else {
-    $channelId = $channel['id'];
-}
+$shortId = generateUUID();
+$channelId = $user['channel_id'] ?? generateUUID();
 
 $stmt = $db->prepare("
-    INSERT INTO shorts (
-        id, user_id, channel_id, short_url, thumbnail, description, created_at
-    ) VALUES (
-        :id, :user_id, :channel_id, :short_url, :thumbnail, :description, NOW()
-    )
+    INSERT INTO shorts (id, user_id, channel_id, short_url, thumbnail, description, created_at)
+    VALUES (:id, :user_id, :channel_id, :short_url, :thumbnail, :description, NOW())
 ");
 
 $stmt->execute([
@@ -93,10 +85,8 @@ $stmt->execute([
 
 respond([
     'success' => true,
-    'message' => 'Short uploaded successfully',
-    'short' => [
-        'id' => $shortId,
-        'short_url' => $shortUrl,
-        'thumbnail' => $thumbnailUrl
-    ]
+    'short_id' => $shortId,
+    'short_url' => $shortUrl,
+    'thumbnail_url' => $thumbnailUrl,
+    'message' => 'Short uploaded successfully'
 ]);

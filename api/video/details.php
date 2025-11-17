@@ -5,7 +5,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     respond(['success' => false, 'error' => 'Method not allowed'], 405);
 }
 
-$videoId = $_GET['id'] ?? '';
+$videoId = $_GET['video_id'] ?? '';
 
 if (empty($videoId)) {
     respond(['success' => false, 'error' => 'Video ID required'], 400);
@@ -16,31 +16,59 @@ $db = getDB();
 $stmt = $db->prepare("
     SELECT 
         v.*,
-        u.username as author_name,
-        u.profile_pic as author_avatar,
-        c.name as channel_name,
-        c.handle as channel_handle,
-        c.subscriber_count
+        u.id as uploader_id,
+        u.username as uploader_username,
+        u.name as uploader_name,
+        u.profile_pic as uploader_profile_pic
     FROM videos v
     INNER JOIN users u ON v.user_id = u.id
-    INNER JOIN channels c ON v.channel_id = c.id
-    WHERE v.id = :id
-    LIMIT 1
+    WHERE v.id = :video_id
 ");
-
-$stmt->execute(['id' => $videoId]);
+$stmt->execute(['video_id' => $videoId]);
 $video = $stmt->fetch();
 
 if (!$video) {
     respond(['success' => false, 'error' => 'Video not found'], 404);
 }
 
-$video['tags'] = json_decode($video['tags'], true);
+$video['tags'] = json_decode($video['tags'] ?? '[]', true);
+$video['uploader'] = [
+    'id' => $video['uploader_id'],
+    'username' => $video['uploader_username'],
+    'name' => $video['uploader_name'],
+    'profile_pic' => $video['uploader_profile_pic']
+];
+unset($video['uploader_id'], $video['uploader_username'], $video['uploader_name'], $video['uploader_profile_pic']);
 
-$updateViews = $db->prepare("UPDATE videos SET views = views + 1 WHERE id = :id");
-$updateViews->execute(['id' => $videoId]);
+$stmt = $db->prepare("
+    SELECT 
+        c.*,
+        u.username,
+        u.name,
+        u.profile_pic
+    FROM video_comments c
+    INNER JOIN users u ON c.user_id = u.id
+    WHERE c.video_id = :video_id
+    ORDER BY c.created_at DESC
+    LIMIT 50
+");
+$stmt->execute(['video_id' => $videoId]);
+$comments = $stmt->fetchAll();
+
+foreach ($comments as &$comment) {
+    $comment['user'] = [
+        'username' => $comment['username'],
+        'name' => $comment['name'],
+        'profile_pic' => $comment['profile_pic']
+    ];
+    unset($comment['username'], $comment['name'], $comment['profile_pic']);
+}
+
+$stmt = $db->prepare("UPDATE videos SET views = views + 1 WHERE id = :video_id");
+$stmt->execute(['video_id' => $videoId]);
 
 respond([
     'success' => true,
-    'video' => $video
+    'video' => $video,
+    'comments' => $comments
 ]);

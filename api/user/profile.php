@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
     
     $db = getDB();
-    $stmt = $db->prepare("SELECT id, username, name, email, role, profile_pic, bio, phone, created_at FROM users WHERE id = :id");
+    $stmt = $db->prepare("SELECT * FROM users WHERE id = :id");
     $stmt->execute(['id' => $userId]);
     $user = $stmt->fetch();
     
@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         respond(['success' => false, 'error' => 'User not found'], 404);
     }
     
-    respond(['success' => true, 'user' => $user]);
+    respond(['success' => true, 'user' => formatUserResponse($user)]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -29,6 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = trim($input['phone'] ?? '');
     $profilePic = trim($input['profile_pic'] ?? $user['profile_pic'] ?? '');
     
+    if (empty($name)) {
+        respond(['success' => false, 'error' => 'Name is required'], 400);
+    }
+    
     $db = getDB();
     $stmt = $db->prepare("
         UPDATE users 
@@ -36,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         WHERE id = :id
     ");
     
-    $stmt->execute([
+    $success = $stmt->execute([
         'name' => $name,
         'bio' => $bio,
         'phone' => $phone,
@@ -44,7 +48,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'id' => $user['id']
     ]);
     
-    respond(['success' => true, 'message' => 'Profile updated']);
+    if (!$success) {
+        respond(['success' => false, 'error' => 'Failed to update profile'], 500);
+    }
+    
+    $stmt = $db->prepare("SELECT * FROM users WHERE id = :id");
+    $stmt->execute(['id' => $user['id']]);
+    $updatedUser = $stmt->fetch();
+    
+    respond([
+        'success' => true, 
+        'message' => 'Profile updated',
+        'user' => formatUserResponse($updatedUser)
+    ]);
 }
 
 respond(['success' => false, 'error' => 'Method not allowed'], 405);
