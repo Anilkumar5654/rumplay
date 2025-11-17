@@ -114,7 +114,21 @@ export default function EditProfileScreen() {
         body: formData,
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      console.log("Profile upload response status:", response.status);
+      console.log("Profile upload response text:", responseText);
+
+      if (!response.ok) {
+        throw new Error(`Server error (${response.status}): ${responseText}`);
+      }
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", responseText);
+        throw new Error("Invalid response from server. Please check your API endpoint.");
+      }
 
       if (data.success && data.profile_pic_url) {
         setProfilePic(data.profile_pic_url);
@@ -125,7 +139,8 @@ export default function EditProfileScreen() {
       }
     } catch (error) {
       console.error("Error uploading profile picture:", error);
-      Alert.alert("Error", "Failed to upload profile picture. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      Alert.alert("Upload Error", errorMessage);
     } finally {
       setUploadingAvatar(false);
     }
