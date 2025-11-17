@@ -31,6 +31,7 @@ import {
 } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
+import { useAuth } from "@/contexts/AuthContext";
 import type { Settings } from "@/types";
 
 const ACCENT_COLORS = [
@@ -50,8 +51,10 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { settings, saveSettings, currentUser, videos, channels } = useAppState();
+  const { logout } = useAuth();
 
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
   const [showDeveloperOptions, setShowDeveloperOptions] = useState<boolean>(false);
 
   const handleSettingChange = async <K extends keyof Settings>(
@@ -165,6 +168,31 @@ export default function SettingsScreen() {
   };
 
   const accentColor = localSettings.accentColor || theme.colors.primary;
+
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+    try {
+      console.log("SettingsScreen logout request");
+      await logout();
+      Alert.alert("Logged Out", "You have been signed out successfully.", [
+        {
+          text: "OK",
+          onPress: () => {
+            router.replace("/login");
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error("SettingsScreen logout error", error);
+      Alert.alert("Logout Failed", "Unable to logout right now. Please try again.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -471,6 +499,17 @@ export default function SettingsScreen() {
               </View>
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            testID="logout-button"
+            style={[styles.settingItem, styles.logoutButton]}
+            onPress={handleLogout}
+            disabled={isLoggingOut}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={styles.logoutLabel}>{isLoggingOut ? "Signing out..." : "Logout"}</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -669,5 +708,14 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.sm,
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.xs,
+  },
+  logoutButton: {
+    borderTopWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  logoutLabel: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: "600" as const,
+    color: theme.colors.error,
   },
 });

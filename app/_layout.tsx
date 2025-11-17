@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppStateProvider } from "@/contexts/AppStateContext";
 import { PlayerProvider } from "@/contexts/PlayerContext";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -45,15 +46,17 @@ export default function RootLayout() {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <AppStateProvider>
-            <PlayerProvider>
-              <View style={{ flex: 1 }}>
-                <RootLayoutNav />
-              </View>
-            </PlayerProvider>
-          </AppStateProvider>
-        </AuthProvider>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <AppStateProvider>
+              <PlayerProvider>
+                <View style={{ flex: 1 }}>
+                  <RootLayoutNav />
+                </View>
+              </PlayerProvider>
+            </AppStateProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );
