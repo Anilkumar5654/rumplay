@@ -39,13 +39,28 @@ export default class ScreenErrorBoundary extends Component<
     }
   };
 
+  private getDisplayMessage = (): string => {
+    const rawMessage = this.state.error?.message ?? "";
+    if (!rawMessage) {
+      return "We hit an unexpected issue while loading this screen.";
+    }
+    const normalized = rawMessage.toLowerCase();
+    if (normalized.includes("multipart") && normalized.includes("response")) {
+      return "Live reload stream broke. Restart the Expo dev server or reload the app to continue.";
+    }
+    if (normalized.includes("network request failed")) {
+      return "Network request failed. Confirm the device and dev server share the same network or use tunnel mode.";
+    }
+    return rawMessage;
+  };
+
   public render(): ReactNode {
     if (this.state.hasError) {
       return (
         <View style={styles.fallback} testID="screen-error-boundary">
           <Text style={styles.title}>Something went wrong</Text>
           <Text style={styles.message} numberOfLines={3}>
-            {this.state.error?.message ?? "We hit an unexpected issue while loading this screen."}
+            {this.getDisplayMessage()}
           </Text>
           <TouchableOpacity
             style={styles.retryButton}
