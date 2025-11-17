@@ -170,9 +170,20 @@ export default function EditProfileScreen() {
     try {
       setIsSaving(true);
       const apiRoot = getEnvApiRootUrl();
-      
       const apiBaseUrl = apiRoot.replace('/api', '');
-      const profilePicPath = profilePic ? profilePic.replace(apiBaseUrl, '') : '';
+      
+      let profilePicPath = '';
+      if (profilePic) {
+        if (profilePic.startsWith(apiBaseUrl)) {
+          profilePicPath = profilePic.replace(apiBaseUrl, '');
+        } else if (profilePic.startsWith('/uploads/')) {
+          profilePicPath = profilePic;
+        } else if (profilePic.startsWith('http')) {
+          profilePicPath = profilePic;
+        } else {
+          profilePicPath = profilePic;
+        }
+      }
       
       const response = await fetch(`${apiRoot}/user/update`, {
         method: 'POST',

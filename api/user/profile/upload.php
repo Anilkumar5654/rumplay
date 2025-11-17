@@ -37,11 +37,11 @@ if (!move_uploaded_file($file['tmp_name'], $filepath)) {
     respond(['success' => false, 'error' => 'Failed to upload image'], 500);
 }
 
-$profilePicUrl = 'https://moviedbr.com/uploads/profiles/' . $filename;
+$profilePicPath = '/uploads/profiles/' . $filename;
 
 $db = getDB();
 $stmt = $db->prepare("UPDATE users SET profile_pic = :profile_pic, updated_at = NOW() WHERE id = :id");
-$success = $stmt->execute(['profile_pic' => $profilePicUrl, 'id' => $user['id']]);
+$success = $stmt->execute(['profile_pic' => $profilePicPath, 'id' => $user['id']]);
 
 if (!$success) {
     respond(['success' => false, 'error' => 'Failed to update profile picture in database'], 500);
@@ -49,6 +49,6 @@ if (!$success) {
 
 respond([
     'success' => true,
-    'profile_pic_url' => $profilePicUrl,
+    'profile_pic_url' => $profilePicPath,
     'message' => 'Profile picture updated successfully'
 ]);

@@ -56,9 +56,15 @@ export default function ProfileScreen() {
       
       if (data.success && data.user) {
         const apiBaseUrl = apiRoot.replace('/api', '');
+        let profilePicUrl = data.user.profile_pic;
+        
+        if (profilePicUrl && profilePicUrl.startsWith('/uploads/')) {
+          profilePicUrl = `${apiBaseUrl}${profilePicUrl}`;
+        }
+        
         const processedUser = {
           ...data.user,
-          profile_pic: data.user.profile_pic ? `${apiBaseUrl}${data.user.profile_pic}` : data.user.profile_pic
+          profile_pic: profilePicUrl
         };
         setProfileData(processedUser);
       } else {
