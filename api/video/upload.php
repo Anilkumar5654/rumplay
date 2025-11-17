@@ -82,7 +82,12 @@ $tagsJson = json_encode($tagsArray);
 
 $db = getDB();
 $videoId = generateUUID();
-$channelId = $user['channel_id'] ?? generateUUID();
+
+if (empty($user['channel_id'])) {
+    respond(['success' => false, 'error' => 'Channel not found. Please create a channel first.'], 400);
+}
+
+$channelId = $user['channel_id'];
 
 $stmt = $db->prepare("
     INSERT INTO videos (

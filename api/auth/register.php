@@ -69,6 +69,34 @@ $stmt->execute([
     'expires_at' => $expiresAt
 ]);
 
+$channelId = generateUUID();
+$channelName = $username . "'s Channel";
+$handle = '@' . strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $username)) . '_' . substr($channelId, 0, 6);
+$description = 'Welcome to my channel!';
+
+$stmt = $db->prepare("
+    INSERT INTO channels (
+        id, user_id, name, handle, description, monetization, created_at
+    ) VALUES (
+        :id, :user_id, :name, :handle, :description, :monetization, NOW()
+    )
+");
+
+$stmt->execute([
+    'id' => $channelId,
+    'user_id' => $userId,
+    'name' => $channelName,
+    'handle' => $handle,
+    'description' => $description,
+    'monetization' => json_encode([])
+]);
+
+$stmt = $db->prepare("UPDATE users SET channel_id = :channel_id WHERE id = :id");
+$stmt->execute([
+    'channel_id' => $channelId,
+    'id' => $userId
+]);
+
 $stmt = $db->prepare("SELECT * FROM users WHERE id = :id");
 $stmt->execute(['id' => $userId]);
 $user = $stmt->fetch();
