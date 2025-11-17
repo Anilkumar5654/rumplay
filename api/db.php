@@ -114,20 +114,20 @@ function formatUserResponse($user) {
     return [
         'id' => $user['id'],
         'username' => $user['username'],
-        'name' => $user['name'],
+        'displayName' => $user['name'],
         'email' => $user['email'],
         'role' => $user['role'],
-        'profile_pic' => $user['profile_pic'],
+        'avatar' => $user['profile_pic'],
         'bio' => $user['bio'],
         'phone' => $user['phone'],
-        'channel_id' => $user['channel_id'],
+        'channelId' => $user['channel_id'],
         'subscriptions' => json_decode($user['subscriptions'] ?? '[]', true),
         'memberships' => json_decode($user['memberships'] ?? '[]', true),
         'reactions' => json_decode($user['reactions'] ?? '[]', true),
-        'watch_history' => json_decode($user['watch_history'] ?? '[]', true),
-        'watch_history_detailed' => json_decode($user['watch_history_detailed'] ?? '[]', true),
-        'saved_videos' => json_decode($user['saved_videos'] ?? '[]', true),
-        'liked_videos' => json_decode($user['liked_videos'] ?? '[]', true),
-        'created_at' => $user['created_at']
+        'watchHistory' => json_decode($user['watch_history'] ?? '[]', true),
+        'watchHistoryDetailed' => json_decode($user['watch_history_detailed'] ?? '[]', true),
+        'savedVideos' => json_decode($user['saved_videos'] ?? '[]', true),
+        'likedVideos' => json_decode($user['liked_videos'] ?? '[]', true),
+        'createdAt' => $user['created_at']
     ];
 }

@@ -116,27 +116,37 @@ type AuthHandlerResult =
   | { success: true; token: string; user: User }
   | { success: false; message: string };
 
-const mapBackendUser = (data: BackendUserPayload): User => ({
-  id: data.id,
-  email: data.email,
-  username: data.username,
-  displayName: data.displayName ?? data.username,
-  avatar: data.avatar ?? "",
-  bio: data.bio ?? "",
-  phone: data.phone ?? null,
-  channelId: data.channelId ?? null,
-  role: data.role,
-  rolesAssignedBy: data.rolesAssignedBy,
-  subscriptions: data.subscriptions ?? [],
-  memberships: data.memberships ?? [],
-  reactions: data.reactions ?? [],
-  watchHistory: data.watchHistory ?? [],
-  watchHistoryDetailed: data.watchHistoryDetailed ?? [],
-  savedVideos: data.savedVideos ?? [],
-  likedVideos: data.likedVideos ?? [],
-  password: undefined,
-  createdAt: data.createdAt,
-});
+const mapBackendUser = (data: BackendUserPayload): User => {
+  const apiRoot = getEnvApiRootUrl();
+  const apiBaseUrl = apiRoot.replace('/api', '');
+  
+  let avatarUrl = data.avatar ?? "";
+  if (avatarUrl && avatarUrl.startsWith('/uploads/')) {
+    avatarUrl = `${apiBaseUrl}${avatarUrl}`;
+  }
+  
+  return {
+    id: data.id,
+    email: data.email,
+    username: data.username,
+    displayName: data.displayName ?? data.username,
+    avatar: avatarUrl,
+    bio: data.bio ?? "",
+    phone: data.phone ?? null,
+    channelId: data.channelId ?? null,
+    role: data.role,
+    rolesAssignedBy: data.rolesAssignedBy,
+    subscriptions: data.subscriptions ?? [],
+    memberships: data.memberships ?? [],
+    reactions: data.reactions ?? [],
+    watchHistory: data.watchHistory ?? [],
+    watchHistoryDetailed: data.watchHistoryDetailed ?? [],
+    savedVideos: data.savedVideos ?? [],
+    likedVideos: data.likedVideos ?? [],
+    password: undefined,
+    createdAt: data.createdAt,
+  };
+};
 
 const resolveAuthErrorMessage = (error: unknown): string => {
   console.log("[AuthContext] resolveAuthErrorMessage", error);
@@ -455,8 +465,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           displayName: updates.displayName,
           email: updates.email,
           bio: updates.bio,
-          phone: updates.phone,
-          avatar: updates.avatar,
+          phone: updates.phone ?? undefined,
+          avatar: updates.avatar ?? undefined,
           newPassword: updates.newPassword,
           currentPassword: updates.currentPassword,
         });

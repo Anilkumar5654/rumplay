@@ -56,15 +56,15 @@ export default function ProfileScreen() {
       
       if (data.success && data.user) {
         const apiBaseUrl = apiRoot.replace('/api', '');
-        let profilePicUrl = data.user.profile_pic;
+        let avatarUrl = data.user.avatar;
         
-        if (profilePicUrl && profilePicUrl.startsWith('/uploads/')) {
-          profilePicUrl = `${apiBaseUrl}${profilePicUrl}`;
+        if (avatarUrl && avatarUrl.startsWith('/uploads/')) {
+          avatarUrl = `${apiBaseUrl}${avatarUrl}`;
         }
         
         const processedUser = {
           ...data.user,
-          profile_pic: profilePicUrl
+          avatar: avatarUrl
         };
         setProfileData(processedUser);
       } else {
@@ -122,9 +122,9 @@ export default function ProfileScreen() {
     if (profileData) {
       return {
         ...authUser,
-        displayName: profileData.name || authUser?.displayName,
+        displayName: profileData.displayName || authUser?.displayName,
         username: profileData.username || authUser?.username,
-        avatar: profileData.profile_pic || authUser?.avatar,
+        avatar: profileData.avatar || authUser?.avatar,
         bio: profileData.bio || authUser?.bio || '',
         phone: profileData.phone || authUser?.phone,
         email: profileData.email || authUser?.email,

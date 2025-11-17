@@ -131,7 +131,12 @@ export default function EditProfileScreen() {
       }
 
       if (data.success && data.profile_pic_url) {
-        setProfilePic(data.profile_pic_url);
+        const apiBaseUrl = apiRoot.replace('/api', '');
+        const fullProfilePicUrl = data.profile_pic_url.startsWith('http') 
+          ? data.profile_pic_url 
+          : `${apiBaseUrl}${data.profile_pic_url}`;
+        
+        setProfilePic(fullProfilePicUrl);
         await refreshAuthUser();
         Alert.alert("Success", "Profile picture updated successfully!");
       } else {

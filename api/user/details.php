@@ -20,4 +20,5 @@ if (!$user) {
     respond(['success' => false, 'error' => 'User not found'], 404);
 }
 
-respond(['success' => true, 'user' => formatUserResponse($user)]);
+$formattedUser = formatUserResponse($user);
+respond(['success' => true, 'user' => $formattedUser]);
