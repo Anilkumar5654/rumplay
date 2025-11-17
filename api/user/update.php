@@ -9,12 +9,16 @@ $user = requireAuth();
 $input = json_decode(file_get_contents('php://input'), true);
 
 error_log("Update Profile Input: " . json_encode($input));
-error_log("Current User: " . json_encode($user));
+error_log("Current User ID: " . $user['id']);
 
-$name = trim($input['name'] ?? $user['name']);
-$bio = trim($input['bio'] ?? $user['bio'] ?? '');
-$phone = trim($input['phone'] ?? $user['phone'] ?? '');
-$profilePic = trim($input['profile_pic'] ?? $user['profile_pic'] ?? '');
+$name = isset($input['name']) ? trim($input['name']) : $user['name'];
+$bio = isset($input['bio']) ? trim($input['bio']) : ($user['bio'] ?? '');
+$phone = isset($input['phone']) ? trim($input['phone']) : ($user['phone'] ?? '');
+
+$profilePic = $user['profile_pic'] ?? '';
+if (isset($input['profile_pic']) && !empty($input['profile_pic'])) {
+    $profilePic = trim($input['profile_pic']);
+}
 
 if (empty($name)) {
     respond(['success' => false, 'error' => 'Name is required'], 400);

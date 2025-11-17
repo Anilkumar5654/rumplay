@@ -136,8 +136,12 @@ export default function EditProfileScreen() {
           ? data.profile_pic_url 
           : `${apiBaseUrl}${data.profile_pic_url}`;
         
+        console.log("Setting profile pic to:", fullProfilePicUrl);
         setProfilePic(fullProfilePicUrl);
-        await refreshAuthUser();
+        
+        const refreshResult = await refreshAuthUser();
+        console.log("Auth refresh result:", refreshResult);
+        
         Alert.alert("Success", "Profile picture updated successfully!");
       } else {
         Alert.alert("Error", data.error || "Failed to upload profile picture.");
@@ -157,38 +161,15 @@ export default function EditProfileScreen() {
       return;
     }
 
-    if (!username.trim() || username.length < 3) {
-      Alert.alert("Error", "Username must be at least 3 characters.");
-      return;
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      Alert.alert("Error", "Username can only contain letters, numbers, and underscores.");
-      return;
-    }
-
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      Alert.alert("Error", "Please enter a valid email address.");
-      return;
-    }
-
     try {
       setIsSaving(true);
       const apiRoot = getEnvApiRootUrl();
-      const apiBaseUrl = apiRoot.replace('/api', '');
       
-      let profilePicPath = '';
-      if (profilePic) {
-        if (profilePic.startsWith(apiBaseUrl)) {
-          profilePicPath = profilePic.replace(apiBaseUrl, '');
-        } else if (profilePic.startsWith('/uploads/')) {
-          profilePicPath = profilePic;
-        } else if (profilePic.startsWith('http')) {
-          profilePicPath = profilePic;
-        } else {
-          profilePicPath = profilePic;
-        }
-      }
+      console.log("Saving profile with data:", {
+        name: displayName,
+        bio: bio,
+        phone: phone,
+      });
       
       const response = await fetch(`${apiRoot}/user/update`, {
         method: 'POST',
@@ -201,14 +182,24 @@ export default function EditProfileScreen() {
           name: displayName,
           bio: bio,
           phone: phone,
-          profile_pic: profilePicPath,
         }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      console.log("Update profile response:", responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("Failed to parse update response:", responseText);
+        throw new Error("Invalid response from server");
+      }
 
       if (data.success) {
-        await refreshAuthUser();
+        const refreshResult = await refreshAuthUser();
+        console.log("Auth refresh after update:", refreshResult);
+        
         Alert.alert("Success", "Profile updated successfully!", [
           { text: "OK", onPress: () => router.back() },
         ]);
@@ -217,7 +208,8 @@ export default function EditProfileScreen() {
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert("Error", "Failed to update profile. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      Alert.alert("Error", `Failed to update profile: ${errorMessage}`);
     } finally {
       setIsSaving(false);
     }

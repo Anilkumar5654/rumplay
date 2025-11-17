@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit, LogOut } from "lucide-react-native";
 import VideoEditModal from "../../components/VideoEditModal";
 import { Video } from "../../types";
@@ -38,12 +38,25 @@ export default function ProfileScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authUser]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated && authUser) {
+        console.log("Profile screen focused, refreshing data...");
+        fetchProfileData();
+      }
+    }, [isAuthenticated, authUser])
+  );
+
   const fetchProfileData = async () => {
     if (!authUser || !authToken) return;
     
     try {
       setIsLoadingProfile(true);
       const apiRoot = getEnvApiRootUrl();
+      const apiBaseUrl = apiRoot.replace('/api', '');
+      
+      console.log("Fetching profile for user:", authUser.id);
+      
       const response = await fetch(`${apiRoot}/user/details?user_id=${authUser.id}`, {
         method: 'GET',
         headers: {
@@ -53,14 +66,16 @@ export default function ProfileScreen() {
       });
 
       const data = await response.json();
+      console.log("Profile data received:", data);
       
       if (data.success && data.user) {
-        const apiBaseUrl = apiRoot.replace('/api', '');
         let avatarUrl = data.user.avatar;
         
         if (avatarUrl && avatarUrl.startsWith('/uploads/')) {
           avatarUrl = `${apiBaseUrl}${avatarUrl}`;
         }
+        
+        console.log("Processed avatar URL:", avatarUrl);
         
         const processedUser = {
           ...data.user,
