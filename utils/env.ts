@@ -6,11 +6,23 @@ export const getEnvApiBaseUrl = (): string => {
   if (cachedBaseUrl) {
     return cachedBaseUrl;
   }
-  const raw = process.env.EXPO_PUBLIC_API_URL || "https://moviedbr.com";
+  
+  const raw = process.env.EXPO_PUBLIC_API_URL;
+  
+  if (!raw || raw.trim().length === 0) {
+    console.warn("[env] EXPO_PUBLIC_API_URL not set, using default: http://localhost:8081");
+    cachedBaseUrl = "http://localhost:8081";
+    return cachedBaseUrl;
+  }
+  
   const normalized = normalizeBaseUrl(raw);
+  
   if (!/^https?:\/\//i.test(normalized)) {
+    console.error("[env] Invalid EXPO_PUBLIC_API_URL:", raw);
     throw new Error("Backend URL must start with http:// or https://");
   }
+  
+  console.log("[env] Using API Base URL:", normalized);
   cachedBaseUrl = normalized;
   return cachedBaseUrl;
 };

@@ -1,9 +1,12 @@
-# Frontend API Base URL (Your backend server URL - for local development use the dev server)
+# Frontend API Base URL
+# IMPORTANT: This should point to your dev server when developing locally
+# The Rork CLI automatically starts the backend API at the same URL as the frontend
+# Default format: http://localhost:8081 or your ngrok/tunnel URL
+# When deployed, use: https://moviedbr.com
 EXPO_PUBLIC_API_URL="http://localhost:8081"
 
-# Backend Database Configuration (Hostinger MySQL)
-# IMPORTANT: Use the remote MySQL hostname provided by Hostinger, NOT localhost
-# You need to enable remote MySQL access in Hostinger cPanel
+# Backend Database Configuration (Hostinger Remote MySQL)
+# REMOTE MySQL configuration - backend runs locally but connects to Hostinger MySQL
 DB_HOST="srv1616.hstgr.io"
 DB_USER="u449340066_rumplay"
 DB_PASSWORD="6>E/UCiT;AYh"
@@ -11,7 +14,8 @@ DB_NAME="u449340066_rumplay"
 DB_PORT="3306"
 DB_CHARSET="utf8mb4"
 
-# Hostinger FTP/SFTP Configuration for Media Uploads
+# Hostinger FTP Configuration for Media Uploads
+# Files (videos/images) are uploaded directly to Hostinger via FTP
 HOSTINGER_FTP_HOST="82.25.120.38"
 HOSTINGER_FTP_USER="u449340066"
 HOSTINGER_FTP_PASSWORD="1rZ6xAyXDm[Mpt|+"
@@ -19,6 +23,7 @@ HOSTINGER_FTP_PORT="21"
 HOSTINGER_UPLOADS_PATH="/public_html/uploads"
 
 # Public Base URL for uploaded files
+# This is where uploaded media files can be accessed
 PUBLIC_BASE_URL="https://moviedbr.com"
 
 # CORS Configuration

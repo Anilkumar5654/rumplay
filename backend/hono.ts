@@ -388,6 +388,7 @@ app.use("*", async (c, next) => {
     return c.text("", 204);
   }
 
+  console.log(`[API] ${c.req.method} ${c.req.path}`);
   await next();
 });
 
