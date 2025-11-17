@@ -403,7 +403,7 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
       const formData = new FormData();
 
       const videoFile = await createFileObject(resolvedVideoMeta.uri, resolvedVideoMeta.name, resolvedVideoMeta.mimeType);
-      formData.append("file", videoFile as any);
+      formData.append("video", videoFile as any);
 
       const thumbnailFile = await createFileObject(resolvedThumbnailMeta.uri, resolvedThumbnailMeta.name, resolvedThumbnailMeta.mimeType);
       formData.append("thumbnail", thumbnailFile as any);
@@ -411,12 +411,11 @@ export default function UploadModal({ visible, onClose, onUploadComplete }: { vi
       formData.append("title", uploadData.title || "Untitled Video");
       formData.append("description", uploadData.description || "");
       formData.append("category", uploadData.category || "Technology");
-      formData.append("visibility", uploadData.visibility || "public");
+      formData.append("privacy", uploadData.visibility || "public");
+      formData.append("is_short", uploadData.isShort ? "1" : "0");
 
       if (uploadData.tags && uploadData.tags.length > 0) {
-        uploadData.tags.forEach((tag) => {
-          formData.append("tags[]", tag);
-        });
+        formData.append("tags", uploadData.tags.join(","));
       }
 
       console.log(`${LOG_PREFIX} FINAL FORM DATA:`, Array.from((formData as any).entries()));

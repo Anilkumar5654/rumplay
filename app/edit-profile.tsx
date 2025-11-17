@@ -9,9 +9,12 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
+import type { ImagePickerAsset } from "expo-image-picker";
 import { ArrowLeft, Camera, Check } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +33,7 @@ export default function EditProfileScreen() {
   const [profilePic, setProfilePic] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (authUser) {
@@ -42,6 +46,90 @@ export default function EditProfileScreen() {
       setIsLoading(false);
     }
   }, [authUser]);
+
+  const pickProfilePicture = async () => {
+    try {
+      if (Platform.OS !== "web") {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission Required", "Please allow access to your photo library.");
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0] as ImagePickerAsset;
+        await uploadProfilePicture(asset.uri);
+      }
+    } catch (error) {
+      console.error("Error picking profile picture:", error);
+      Alert.alert("Error", "Failed to pick profile picture. Please try again.");
+    }
+  };
+
+  const uploadProfilePicture = async (uri: string) => {
+    try {
+      setUploadingAvatar(true);
+      const apiRoot = getEnvApiRootUrl();
+
+      const inferExtension = (fileUri: string): string => {
+        const sanitized = fileUri.split("?")[0];
+        const segment = sanitized.split("/").pop() ?? "";
+        const ext = segment.split(".").pop();
+        return ext ? ext.toLowerCase() : "jpg";
+      };
+
+      const extension = inferExtension(uri);
+      const fileName = `profile-${Date.now()}.${extension}`;
+      const mimeType = extension === "png" ? "image/png" : "image/jpeg";
+
+      const formData = new FormData();
+
+      if (Platform.OS === "web") {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const file = new File([blob], fileName, { type: mimeType });
+        formData.append("profile_pic", file as any);
+      } else {
+        formData.append("profile_pic", {
+          uri,
+          name: fileName,
+          type: mimeType,
+        } as any);
+      }
+
+      const response = await fetch(`${apiRoot}/user/profile/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          Accept: "application/json",
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.profile_pic_url) {
+        setProfilePic(data.profile_pic_url);
+        await refreshAuthUser();
+        Alert.alert("Success", "Profile picture updated successfully!");
+      } else {
+        Alert.alert("Error", data.error || "Failed to upload profile picture.");
+      }
+    } catch (error) {
+      console.error("Error uploading profile picture:", error);
+      Alert.alert("Error", "Failed to upload profile picture. Please try again.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!displayName.trim()) {
@@ -132,9 +220,19 @@ export default function EditProfileScreen() {
             source={{ uri: profilePic || authUser?.avatar || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }} 
             style={styles.avatar} 
           />
-          <TouchableOpacity style={styles.changeAvatarBtn}>
-            <Camera color={theme.colors.primary} size={24} />
-            <Text style={styles.changeAvatarText}>Change Photo</Text>
+          <TouchableOpacity 
+            style={styles.changeAvatarBtn} 
+            onPress={pickProfilePicture}
+            disabled={uploadingAvatar || isSaving}
+          >
+            {uploadingAvatar ? (
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+            ) : (
+              <>
+                <Camera color={theme.colors.primary} size={24} />
+                <Text style={styles.changeAvatarText}>Change Photo</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
