@@ -25,6 +25,7 @@ import { RecommendationEngine } from "../../utils/recommendationEngine";
 import { useProfileData } from "@/hooks/useProfileData";
 
 const { width } = Dimensions.get("window");
+const FALLBACK_AVATAR_URI = "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" as const;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -173,11 +174,18 @@ export default function HomeScreen() {
             >
               <Plus color={theme.colors.primary} size={24} />
             </TouchableOpacity>
-            {(profile || authUser) && (
+            {(profile || authUser || currentUser) && (
               <TouchableOpacity onPress={() => router.push("/(tabs)/profile")}>
-                <Image 
-                  source={{ uri: (profile?.avatar ?? authUser?.avatar) || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }} 
-                  style={styles.profileAvatar} 
+                <Image
+                  source={{
+                    uri:
+                      (profile?.avatar && profile.avatar.length > 0 && profile.avatar) ||
+                      (authUser?.avatar && authUser.avatar.length > 0 && authUser.avatar) ||
+                      (currentUser.avatar && currentUser.avatar.length > 0 && currentUser.avatar) ||
+                      FALLBACK_AVATAR_URI,
+                  }}
+                  style={styles.profileAvatar}
+                  testID="home-header-profile-avatar"
                 />
               </TouchableOpacity>
             )}

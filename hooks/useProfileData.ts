@@ -1,17 +1,20 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Platform } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppState } from "@/contexts/AppStateContext";
 import type { User } from "@/types";
 import { getEnvApiRootUrl } from "@/utils/env";
 
 type BackendProfileUser = {
   id: string;
   username: string;
+  name?: string | null;
   displayName?: string | null;
   email: string;
   role: string;
   avatar?: string | null;
+  profile_pic?: string | null;
   bio?: string | null;
   phone?: string | null;
   channelId?: string | null;
@@ -111,12 +114,17 @@ const resolveAvatarUrl = (avatar: string | null | undefined, apiRoot: string): s
 };
 
 const mapBackendUser = (user: BackendProfileUser, apiRoot: string): User => {
+  const displayNameCandidate =
+    (user.displayName && user.displayName.length > 0 ? user.displayName : null) ??
+    (user.name && user.name.length > 0 ? user.name : null);
+  const resolvedAvatar = resolveAvatarUrl(user.avatar ?? user.profile_pic ?? "", apiRoot);
+
   return {
     id: user.id,
     username: user.username,
-    displayName: user.displayName && user.displayName.length > 0 ? user.displayName : user.username,
+    displayName: displayNameCandidate ?? user.username,
     email: user.email,
-    avatar: resolveAvatarUrl(user.avatar ?? "", apiRoot),
+    avatar: resolvedAvatar,
     bio: user.bio ?? "",
     phone: user.phone ?? null,
     channelId: user.channelId ?? null,
@@ -171,6 +179,7 @@ const buildFormData = async (payload: UpdateProfilePayload): Promise<{ formData:
 
 export function useProfileData() {
   const { authToken, refreshAuthUser } = useAuth();
+  const { saveCurrentUser } = useAppState();
   const queryClient = useQueryClient();
   const apiRoot = getEnvApiRootUrl();
 
@@ -201,6 +210,16 @@ export function useProfileData() {
       return mapped;
     },
   });
+
+  useEffect(() => {
+    if (!profileQuery.data) {
+      return;
+    }
+    console.log("[useProfileData] Syncing profile into AppState", profileQuery.data.id);
+    saveCurrentUser(profileQuery.data).catch((error) => {
+      console.error("[useProfileData] Failed to persist profile", error);
+    });
+  }, [profileQuery.data, saveCurrentUser]);
 
   const updateMutation = useMutation({
     mutationFn: async (payload: UpdateProfilePayload) => {
@@ -233,6 +252,9 @@ export function useProfileData() {
     },
     onSuccess: async (data) => {
       queryClient.setQueryData(getProfileQueryKey(apiRoot, authToken ?? null), data);
+      saveCurrentUser(data).catch((error) => {
+        console.error("[useProfileData] Failed to persist updated profile", error);
+      });
       await refreshAuthUser();
     },
   });

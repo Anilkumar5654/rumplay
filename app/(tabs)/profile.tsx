@@ -12,6 +12,7 @@ import { getEnvApiRootUrl } from "@/utils/env";
 import { useProfileData } from "@/hooks/useProfileData";
 
 const { width } = Dimensions.get("window");
+const FALLBACK_AVATAR_URI = "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" as const;
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -149,6 +150,19 @@ export default function ProfileScreen() {
     }
   }, [activeUser.role]);
 
+  const resolvedAvatar = useMemo(() => {
+    if (profile?.avatar && profile.avatar.length > 0) {
+      return profile.avatar;
+    }
+    if (authUser?.avatar && authUser.avatar.length > 0) {
+      return authUser.avatar;
+    }
+    if (activeUser.avatar && activeUser.avatar.length > 0) {
+      return activeUser.avatar;
+    }
+    return FALLBACK_AVATAR_URI;
+  }, [profile?.avatar, authUser?.avatar, activeUser.avatar]);
+
   const menuItems = [
     { icon: VideoIcon, label: "My Videos", count: myVideos.length, route: null, onPress: () => setShowMyVideos(!showMyVideos) },
     { icon: History, label: "History", count: activeUser.watchHistory?.length || 0, route: null },
@@ -234,8 +248,9 @@ export default function ProfileScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.profileSection}>
           <Image
-            source={{ uri: activeUser.avatar || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }}
+            source={{ uri: resolvedAvatar }}
             style={styles.avatar}
+            testID="profile-avatar"
           />
           <Text style={styles.displayName}>{activeUser.displayName}</Text>
           <Text style={styles.username}>@{activeUser.username}</Text>
