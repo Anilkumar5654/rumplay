@@ -219,18 +219,17 @@ export default function SettingsScreen() {
           >
             {ACCENT_COLORS.map((color) => {
               const isActive = localSettings.accentColor === color.value;
-              const bgColor = String(color.value);
               return (
                 <TouchableOpacity
                   key={color.value}
                   testID={`accent-color-${color.name.toLowerCase()}`}
                   style={[
                     styles.colorOption,
-                    { backgroundColor: bgColor },
                     isActive ? styles.colorOptionActive : undefined,
                   ]}
                   onPress={() => void handleSettingChange("accentColor", color.value)}
                 >
+                  <View style={[styles.colorInner, { backgroundColor: color.value }]} />
                   {isActive && <View style={styles.colorCheck} />}
                 </TouchableOpacity>
               );
@@ -595,16 +594,25 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.sm,
     justifyContent: "center" as const,
     alignItems: "center" as const,
+    position: "relative" as const,
   },
   colorOptionActive: {
     borderWidth: 3,
     borderColor: theme.colors.text,
+  },
+  colorInner: {
+    position: "absolute" as const,
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.full,
   },
   colorCheck: {
     width: 20,
     height: 20,
     borderRadius: theme.radii.full,
     backgroundColor: "#FFFFFF",
+    position: "relative" as const,
+    zIndex: 1,
   },
   qualityContainer: {
     flexDirection: "row" as const,
