@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions } from "react-native";
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit } from "lucide-react-native";
+import { Settings, History, ThumbsUp, Bookmark, ListVideo, Video as VideoIcon, Edit, LogOut } from "lucide-react-native";
 import VideoEditModal from "../../components/VideoEditModal";
 import { Video } from "../../types";
 import { theme } from "../../constants/theme";
 import { useAppState } from "../../contexts/AppStateContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { getEnvApiRootUrl } from "@/utils/env";
 
 const { width } = Dimensions.get("window");
 
@@ -15,10 +16,13 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { currentUser, channels, videos } = useAppState();
-  const { authUser, isAuthenticated, isAuthLoading, roleDestination } = useAuth();
+  const { authUser, isAuthenticated, isAuthLoading, roleDestination, logout, authToken } = useAuth();
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [showMyVideos, setShowMyVideos] = useState(false);
+  const [profileData, setProfileData] = useState<any>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [myUploadedVideos, setMyUploadedVideos] = useState<any[]>([]);
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
@@ -26,15 +30,124 @@ export default function ProfileScreen() {
     }
   }, [isAuthenticated, isAuthLoading, router]);
 
-  const activeUser = useMemo(() => authUser ?? currentUser, [authUser, currentUser]);
+  useEffect(() => {
+    if (isAuthenticated && authUser) {
+      fetchProfileData();
+      fetchMyVideos();
+    }
+  }, [isAuthenticated, authUser]);
+
+  const fetchProfileData = async () => {
+    if (!authUser || !authToken) return;
+    
+    try {
+      setIsLoadingProfile(true);
+      const apiRoot = getEnvApiRootUrl();
+      const response = await fetch(`${apiRoot}/user/profile?user_id=${authUser.id}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.user) {
+        setProfileData(data.user);
+      } else {
+        console.error('Failed to fetch profile:', data.error);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
+  const fetchMyVideos = async () => {
+    if (!authToken) return;
+    
+    try {
+      const apiRoot = getEnvApiRootUrl();
+      const response = await fetch(`${apiRoot}/user/uploads`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.videos) {
+        setMyUploadedVideos(data.videos);
+      }
+    } catch (error) {
+      console.error('Error fetching my videos:', error);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/login');
+          },
+        },
+      ]
+    );
+  };
+
+  const activeUser = useMemo(() => {
+    if (profileData) {
+      return {
+        ...authUser,
+        displayName: profileData.name || authUser?.displayName,
+        username: profileData.username || authUser?.username,
+        avatar: profileData.profile_pic || authUser?.avatar,
+        bio: profileData.bio || authUser?.bio || '',
+        phone: profileData.phone || authUser?.phone,
+        email: profileData.email || authUser?.email,
+        role: profileData.role || authUser?.role,
+        id: profileData.id || authUser?.id,
+        channelId: authUser?.channelId,
+        subscriptions: authUser?.subscriptions || [],
+        likedVideos: authUser?.likedVideos || [],
+        watchHistory: authUser?.watchHistory || [],
+        savedVideos: authUser?.savedVideos || [],
+      };
+    }
+    return authUser ?? currentUser;
+  }, [profileData, authUser, currentUser]);
 
   const userChannel = activeUser.channelId
     ? channels.find((ch) => ch.id === activeUser.channelId)
     : null;
 
   const myVideos = useMemo(() => {
+    if (myUploadedVideos.length > 0) {
+      return myUploadedVideos.map((v) => ({
+        id: v.id,
+        title: v.title,
+        thumbnail: v.thumbnail,
+        views: parseInt(v.views) || 0,
+        likes: parseInt(v.likes) || 0,
+        duration: parseInt(v.duration) || 0,
+        visibility: v.visibility || 'public',
+        isShort: v.is_short === 1 || v.is_short === true,
+        uploaderId: v.user_id,
+      }));
+    }
     return videos.filter((v) => v.uploaderId === activeUser.id || v.channelId === activeUser.channelId);
-  }, [videos, activeUser.id, activeUser.channelId]);
+  }, [myUploadedVideos, videos, activeUser.id, activeUser.channelId]);
 
   const myShorts = myVideos.filter((v) => v.isShort);
   const myRegularVideos = myVideos.filter((v) => !v.isShort);
@@ -54,11 +167,11 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { icon: VideoIcon, label: "My Videos", count: myVideos.length, route: null, onPress: () => setShowMyVideos(!showMyVideos) },
-    { icon: History, label: "History", count: activeUser.watchHistory.length, route: null },
-    { icon: ThumbsUp, label: "Liked Videos", count: activeUser.likedVideos.length, route: null },
-    { icon: Bookmark, label: "Saved Videos", count: activeUser.savedVideos.length, route: null },
+    { icon: History, label: "History", count: activeUser.watchHistory?.length || 0, route: null },
+    { icon: ThumbsUp, label: "Liked Videos", count: activeUser.likedVideos?.length || 0, route: null },
+    { icon: Bookmark, label: "Saved Videos", count: activeUser.savedVideos?.length || 0, route: null },
     { icon: ListVideo, label: "Playlists", count: 0, route: null },
-    { icon: Settings, label: "Settings", count: null, route: "/settings" },
+    { icon: LogOut, label: "Logout", count: null, route: null, onPress: handleLogout },
   ];
 
   const handleEditVideo = (video: Video) => {
@@ -118,6 +231,15 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
+  if (isAuthLoading || isLoadingProfile) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top }]}>
@@ -168,15 +290,15 @@ export default function ProfileScreen() {
 
         <View style={styles.statsSection}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{activeUser.subscriptions.length}</Text>
+            <Text style={styles.statValue}>{activeUser.subscriptions?.length || 0}</Text>
             <Text style={styles.statLabel}>Subscriptions</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{activeUser.likedVideos.length}</Text>
+            <Text style={styles.statValue}>{activeUser.likedVideos?.length || 0}</Text>
             <Text style={styles.statLabel}>Liked</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{activeUser.watchHistory.length}</Text>
+            <Text style={styles.statValue}>{activeUser.watchHistory?.length || 0}</Text>
             <Text style={styles.statLabel}>Watched</Text>
           </View>
         </View>
@@ -252,6 +374,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  centerContent: {
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  loadingText: {
+    marginTop: theme.spacing.md,
+    fontSize: theme.fontSizes.md,
+    color: theme.colors.textSecondary,
   },
   header: {
     paddingHorizontal: theme.spacing.md,
@@ -337,6 +468,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.fontSizes.sm,
     fontWeight: "600" as const,
+  },
+  phoneText: {
+    fontSize: theme.fontSizes.sm,
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.xs,
   },
   statsSection: {
     flexDirection: "row" as const,

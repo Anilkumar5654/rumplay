@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,22 +8,40 @@ import {
   TextInput,
   Image,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Camera, Check } from "lucide-react-native";
 import { theme } from "@/constants/theme";
-import { useAppState } from "@/contexts/AppStateContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { getEnvApiRootUrl } from "@/utils/env";
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, saveCurrentUser, isUsernameUnique } = useAppState();
+  const { authUser, authToken, refreshAuthUser } = useAuth();
 
-  const [displayName, setDisplayName] = useState(currentUser.displayName);
-  const [username, setUsername] = useState(currentUser.username);
-  const [email, setEmail] = useState(currentUser.email);
-  const [bio, setBio] = useState(currentUser.bio);
+  const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [bio, setBio] = useState("");
+  const [phone, setPhone] = useState("");
+  const [profilePic, setProfilePic] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (authUser) {
+      setDisplayName(authUser.displayName || "");
+      setUsername(authUser.username || "");
+      setEmail(authUser.email || "");
+      setBio(authUser.bio || "");
+      setPhone(authUser.phone || "");
+      setProfilePic(authUser.avatar || "");
+      setIsLoading(false);
+    }
+  }, [authUser]);
 
   const handleSave = async () => {
     if (!displayName.trim()) {
@@ -41,29 +59,56 @@ export default function EditProfileScreen() {
       return;
     }
 
-    if (username !== currentUser.username && !isUsernameUnique(username, currentUser.id)) {
-      Alert.alert("Error", "This username is already taken.");
-      return;
-    }
-
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       Alert.alert("Error", "Please enter a valid email address.");
       return;
     }
 
-    const updatedUser = {
-      ...currentUser,
-      displayName,
-      username,
-      email,
-      bio,
-    };
-    
-    await saveCurrentUser(updatedUser);
-    Alert.alert("Success", "Profile updated successfully!", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+    try {
+      setIsSaving(true);
+      const apiRoot = getEnvApiRootUrl();
+      
+      const response = await fetch(`${apiRoot}/user/profile`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          name: displayName,
+          bio: bio,
+          phone: phone,
+          profile_pic: profilePic,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await refreshAuthUser();
+        Alert.alert("Success", "Profile updated successfully!", [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      } else {
+        Alert.alert("Error", data.error || "Failed to update profile.");
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert("Error", "Failed to update profile. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -72,14 +117,21 @@ export default function EditProfileScreen() {
           <ArrowLeft color={theme.colors.text} size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity onPress={handleSave}>
-          <Check color={theme.colors.primary} size={24} />
+        <TouchableOpacity onPress={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+          ) : (
+            <Check color={theme.colors.primary} size={24} />
+          )}
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.avatarSection}>
-          <Image source={{ uri: currentUser.avatar }} style={styles.avatar} />
+          <Image 
+            source={{ uri: profilePic || authUser?.avatar || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }} 
+            style={styles.avatar} 
+          />
           <TouchableOpacity style={styles.changeAvatarBtn}>
             <Camera color={theme.colors.primary} size={24} />
             <Text style={styles.changeAvatarText}>Change Photo</Text>
@@ -95,33 +147,35 @@ export default function EditProfileScreen() {
               onChangeText={setDisplayName}
               placeholder="Enter display name"
               placeholderTextColor={theme.colors.textSecondary}
+              editable={!isSaving}
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Username</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.disabledInput]}
               value={username}
-              onChangeText={setUsername}
-              placeholder="Enter username"
+              placeholder="Username"
               placeholderTextColor={theme.colors.textSecondary}
               autoCapitalize="none"
+              editable={false}
             />
-            <Text style={styles.helperText}>Only letters, numbers, and underscores allowed</Text>
+            <Text style={styles.helperText}>Username cannot be changed</Text>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.disabledInput]}
               value={email}
-              onChangeText={setEmail}
-              placeholder="Enter email"
+              placeholder="Email"
               placeholderTextColor={theme.colors.textSecondary}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={false}
             />
+            <Text style={styles.helperText}>Email cannot be changed</Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -134,6 +188,20 @@ export default function EditProfileScreen() {
               placeholderTextColor={theme.colors.textSecondary}
               multiline
               numberOfLines={4}
+              editable={!isSaving}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Phone (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Enter phone number"
+              placeholderTextColor={theme.colors.textSecondary}
+              keyboardType="phone-pad"
+              editable={!isSaving}
             />
           </View>
         </View>
@@ -146,6 +214,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  centerContent: {
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  loadingText: {
+    marginTop: theme.spacing.md,
+    fontSize: theme.fontSizes.md,
+    color: theme.colors.textSecondary,
   },
   header: {
     flexDirection: "row" as const,
@@ -203,6 +280,9 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     fontSize: theme.fontSizes.md,
     color: theme.colors.text,
+  },
+  disabledInput: {
+    opacity: 0.6,
   },
   textArea: {
     height: 100,
