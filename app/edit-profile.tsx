@@ -156,7 +156,10 @@ export default function EditProfileScreen() {
       setIsSaving(true);
       const apiRoot = getEnvApiRootUrl();
       
-      const response = await fetch(`${apiRoot}/user/profile`, {
+      const apiBaseUrl = apiRoot.replace('/api', '');
+      const profilePicPath = profilePic ? profilePic.replace(apiBaseUrl, '') : '';
+      
+      const response = await fetch(`${apiRoot}/user/update`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -167,7 +170,7 @@ export default function EditProfileScreen() {
           name: displayName,
           bio: bio,
           phone: phone,
-          profile_pic: profilePic,
+          profile_pic: profilePicPath,
         }),
       });
 

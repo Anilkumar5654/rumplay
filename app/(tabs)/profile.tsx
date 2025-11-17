@@ -35,6 +35,7 @@ export default function ProfileScreen() {
       fetchProfileData();
       fetchMyVideos();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authUser]);
 
   const fetchProfileData = async () => {
@@ -43,7 +44,7 @@ export default function ProfileScreen() {
     try {
       setIsLoadingProfile(true);
       const apiRoot = getEnvApiRootUrl();
-      const response = await fetch(`${apiRoot}/user/profile?user_id=${authUser.id}`, {
+      const response = await fetch(`${apiRoot}/user/details?user_id=${authUser.id}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -54,7 +55,12 @@ export default function ProfileScreen() {
       const data = await response.json();
       
       if (data.success && data.user) {
-        setProfileData(data.user);
+        const apiBaseUrl = apiRoot.replace('/api', '');
+        const processedUser = {
+          ...data.user,
+          profile_pic: data.user.profile_pic ? `${apiBaseUrl}${data.user.profile_pic}` : data.user.profile_pic
+        };
+        setProfileData(processedUser);
       } else {
         console.error('Failed to fetch profile:', data.error);
       }
@@ -134,15 +140,28 @@ export default function ProfileScreen() {
 
   const myVideos = useMemo(() => {
     if (myUploadedVideos.length > 0) {
-      return myUploadedVideos.map((v) => ({
+      const apiRoot = getEnvApiRootUrl();
+      const apiBaseUrl = apiRoot.replace('/api', '');
+      return myUploadedVideos.map((v): Video => ({
         id: v.id,
         title: v.title,
-        thumbnail: v.thumbnail,
+        description: v.description || '',
+        thumbnail: v.thumbnail ? `${apiBaseUrl}${v.thumbnail}` : '',
+        videoUrl: v.video_url ? `${apiBaseUrl}${v.video_url}` : '',
+        channelId: v.channel_id || '',
+        channelName: v.channel_name || '',
+        channelAvatar: v.channel_avatar || '',
         views: parseInt(v.views) || 0,
         likes: parseInt(v.likes) || 0,
+        dislikes: parseInt(v.dislikes) || 0,
+        uploadDate: v.created_at || new Date().toISOString(),
         duration: parseInt(v.duration) || 0,
-        visibility: v.visibility || 'public',
+        category: v.category || 'Other',
+        tags: v.tags ? (Array.isArray(v.tags) ? v.tags : v.tags.split(',')) : [],
+        comments: [],
         isShort: v.is_short === 1 || v.is_short === true,
+        isLive: false,
+        visibility: (v.privacy || 'public') as 'public' | 'private' | 'unlisted' | 'scheduled',
         uploaderId: v.user_id,
       }));
     }
@@ -268,7 +287,7 @@ export default function ProfileScreen() {
           {roleAction && (
             <TouchableOpacity
               style={styles.roleActionButton}
-              onPress={() => router.push(roleDestination ?? roleAction.route)}
+              onPress={() => router.push((roleDestination ?? roleAction.route) as any)}
               testID="role-action-button"
             >
               <Text style={styles.roleActionLabel}>{roleAction.label}</Text>
@@ -315,7 +334,7 @@ export default function ProfileScreen() {
                     if (item.onPress) {
                       item.onPress();
                     } else if (item.route) {
-                      router.push(item.route);
+                      router.push(item.route as any);
                     }
                   }}
                 >
