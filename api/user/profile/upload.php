@@ -7,6 +7,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $user = requireAuth();
 
+error_log("Profile upload - User ID: " . $user['id']);
+error_log("FILES: " . json_encode($_FILES));
+
 if (!isset($_FILES['profile_pic'])) {
     respond(['success' => false, 'error' => 'Profile picture file is required'], 400);
 }
@@ -29,13 +32,18 @@ if ($file['size'] > $maxSize) {
 }
 
 $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
-$uuid = generateUUID();
+$uuid = uniqid('profile_', true);
 $filename = $uuid . '.' . $ext;
 $filepath = $uploadDir . $filename;
 
+error_log("Attempting to save file to: $filepath");
+
 if (!move_uploaded_file($file['tmp_name'], $filepath)) {
+    error_log("Failed to move uploaded file");
     respond(['success' => false, 'error' => 'Failed to upload image'], 500);
 }
+
+error_log("File saved successfully: $filepath");
 
 $profilePicPath = '/uploads/profiles/' . $filename;
 
@@ -44,8 +52,11 @@ $stmt = $db->prepare("UPDATE users SET profile_pic = :profile_pic, updated_at = 
 $success = $stmt->execute(['profile_pic' => $profilePicPath, 'id' => $user['id']]);
 
 if (!$success) {
+    error_log("Failed to update database: " . json_encode($stmt->errorInfo()));
     respond(['success' => false, 'error' => 'Failed to update profile picture in database'], 500);
 }
+
+error_log("Database updated successfully. Profile pic path: $profilePicPath");
 
 respond([
     'success' => true,

@@ -17,6 +17,7 @@ import UploadModal from "../../components/UploadModal";
 import ContinueWatchingSection from "../../components/ContinueWatchingSection";
 import { theme } from "../../constants/theme";
 import { useAppState } from "../../contexts/AppStateContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { categories } from "../../mocks/data";
 import { Video } from "../../types";
 import { useRequireAuth } from "../../hooks/useRequireAuth";
@@ -29,6 +30,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const requireAuth = useRequireAuth();
   const { videos, currentUser } = useAppState();
+  const { authUser } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -156,18 +158,28 @@ export default function HomeScreen() {
       <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
         <View style={styles.headerTop}>
           <Text style={styles.logo}>PlayTube</Text>
-          <TouchableOpacity
-            style={styles.uploadButton}
-            onPress={() => {
-              requireAuth({
-                redirectPath: "/upload",
-                reason: "Sign in to upload your next hit video.",
-                onAuthenticated: () => setUploadModalVisible(true),
-              });
-            }}
-          >
-            <Plus color={theme.colors.primary} size={24} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={() => {
+                requireAuth({
+                  redirectPath: "/upload",
+                  reason: "Sign in to upload your next hit video.",
+                  onAuthenticated: () => setUploadModalVisible(true),
+                });
+              }}
+            >
+              <Plus color={theme.colors.primary} size={24} />
+            </TouchableOpacity>
+            {authUser && (
+              <TouchableOpacity onPress={() => router.push("/(tabs)/profile")}>
+                <Image 
+                  source={{ uri: authUser.avatar || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }} 
+                  style={styles.profileAvatar} 
+                />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         <TouchableOpacity
           style={styles.searchContainer}
@@ -279,6 +291,11 @@ const styles = StyleSheet.create({
     fontWeight: "bold" as const,
     color: theme.colors.text,
   },
+  headerActions: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: theme.spacing.sm,
+  },
   uploadButton: {
     width: 40,
     height: 40,
@@ -286,6 +303,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     alignItems: "center" as const,
     justifyContent: "center" as const,
+  },
+  profileAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
   },
   searchContainer: {
     flexDirection: "row" as const,

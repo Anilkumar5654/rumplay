@@ -8,14 +8,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $user = requireAuth();
 $input = json_decode(file_get_contents('php://input'), true);
 
+error_log("Update Profile Input: " . json_encode($input));
+error_log("Current User: " . json_encode($user));
+
 $name = trim($input['name'] ?? $user['name']);
-$bio = trim($input['bio'] ?? '');
-$phone = trim($input['phone'] ?? '');
+$bio = trim($input['bio'] ?? $user['bio'] ?? '');
+$phone = trim($input['phone'] ?? $user['phone'] ?? '');
 $profilePic = trim($input['profile_pic'] ?? $user['profile_pic'] ?? '');
 
 if (empty($name)) {
     respond(['success' => false, 'error' => 'Name is required'], 400);
 }
+
+error_log("Updating user with: name=$name, bio=$bio, phone=$phone, profile_pic=$profilePic");
 
 $db = getDB();
 $stmt = $db->prepare("
@@ -33,12 +38,17 @@ $success = $stmt->execute([
 ]);
 
 if (!$success) {
+    error_log("Failed to update user: " . json_encode($stmt->errorInfo()));
     respond(['success' => false, 'error' => 'Failed to update profile'], 500);
 }
+
+error_log("User updated successfully. Affected rows: " . $stmt->rowCount());
 
 $stmt = $db->prepare("SELECT * FROM users WHERE id = :id");
 $stmt->execute(['id' => $user['id']]);
 $updatedUser = $stmt->fetch();
+
+error_log("Updated user data: " . json_encode($updatedUser));
 
 respond([
     'success' => true, 
