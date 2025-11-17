@@ -17,35 +17,34 @@ import * as ImagePicker from "expo-image-picker";
 import type { ImagePickerAsset } from "expo-image-picker";
 import { ArrowLeft, Camera, Check } from "lucide-react-native";
 import { theme } from "@/constants/theme";
-import { useAuth } from "@/contexts/AuthContext";
-import { getEnvApiRootUrl } from "@/utils/env";
+import { useProfileData } from "@/hooks/useProfileData";
+
+const fallbackAvatar = "https://api.dicebear.com/7.x/thumbs/svg?seed=profile";
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { authUser, authToken, refreshAuthUser } = useAuth();
+  const { profile, isProfileLoading, updateProfile, isUpdatingProfile, refreshProfile } = useProfileData();
 
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [bio, setBio] = useState("");
   const [phone, setPhone] = useState("");
-  const [profilePic, setProfilePic] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [remoteAvatar, setRemoteAvatar] = useState("");
+  const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authUser) {
-      setDisplayName(authUser.displayName || "");
-      setUsername(authUser.username || "");
-      setEmail(authUser.email || "");
-      setBio(authUser.bio || "");
-      setPhone(authUser.phone || "");
-      setProfilePic(authUser.avatar || "");
-      setIsLoading(false);
+    if (profile) {
+      setDisplayName(profile.displayName ?? "");
+      setUsername(profile.username ?? "");
+      setEmail(profile.email ?? "");
+      setBio(profile.bio ?? "");
+      setPhone(profile.phone ?? "");
+      setRemoteAvatar(profile.avatar ?? "");
+      setLocalAvatarUri(null);
     }
-  }, [authUser]);
+  }, [profile]);
 
   const pickProfilePicture = async () => {
     try {
@@ -66,92 +65,11 @@ export default function EditProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0] as ImagePickerAsset;
-        await uploadProfilePicture(asset.uri);
+        setLocalAvatarUri(asset.uri);
       }
     } catch (error) {
       console.error("Error picking profile picture:", error);
       Alert.alert("Error", "Failed to pick profile picture. Please try again.");
-    }
-  };
-
-  const uploadProfilePicture = async (uri: string) => {
-    try {
-      setUploadingAvatar(true);
-      const apiRoot = getEnvApiRootUrl();
-
-      const inferExtension = (fileUri: string): string => {
-        const sanitized = fileUri.split("?")[0];
-        const segment = sanitized.split("/").pop() ?? "";
-        const ext = segment.split(".").pop();
-        return ext ? ext.toLowerCase() : "jpg";
-      };
-
-      const extension = inferExtension(uri);
-      const fileName = `profile-${Date.now()}.${extension}`;
-      const mimeType = extension === "png" ? "image/png" : "image/jpeg";
-
-      const formData = new FormData();
-
-      if (Platform.OS === "web") {
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        const file = new File([blob], fileName, { type: mimeType });
-        formData.append("profile_pic", file as any);
-      } else {
-        formData.append("profile_pic", {
-          uri,
-          name: fileName,
-          type: mimeType,
-        } as any);
-      }
-
-      const response = await fetch(`${apiRoot}/user/edit_profile`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          Accept: "application/json",
-        },
-        body: formData,
-      });
-
-      const responseText = await response.text();
-      console.log("Profile upload response status:", response.status);
-      console.log("Profile upload response text:", responseText);
-
-      if (!response.ok) {
-        throw new Error(`Server error (${response.status}): ${responseText}`);
-      }
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error("Failed to parse JSON response:", responseText);
-        throw new Error("Invalid response from server. Please check your API endpoint.");
-      }
-
-      if (data.success && data.user) {
-        const apiBaseUrl = apiRoot.replace('/api', '');
-        const avatarUrl = data.user.avatar?.startsWith('/uploads/') 
-          ? `${apiBaseUrl}${data.user.avatar}` 
-          : data.user.avatar;
-        
-        console.log("Profile picture updated to:", avatarUrl);
-        setProfilePic(avatarUrl || "");
-        
-        const refreshResult = await refreshAuthUser();
-        console.log("Auth refresh result:", refreshResult);
-        
-        Alert.alert("Success", "Profile picture updated successfully!");
-      } else {
-        Alert.alert("Error", data.error || "Failed to upload profile picture.");
-      }
-    } catch (error) {
-      console.error("Error uploading profile picture:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      Alert.alert("Upload Error", errorMessage);
-    } finally {
-      setUploadingAvatar(false);
     }
   };
 
@@ -161,61 +79,55 @@ export default function EditProfileScreen() {
       return;
     }
 
+    if (!profile) {
+      Alert.alert("Error", "Profile data is not available.");
+      return;
+    }
+
+    const trimmedName = displayName.trim();
+    const trimmedBio = bio.trim();
+    const trimmedPhone = phone.trim();
+
+    const updates: {
+      name?: string;
+      bio?: string;
+      phone?: string;
+      profilePicUri?: string | null;
+    } = {};
+
+    if (trimmedName !== (profile.displayName ?? "")) {
+      updates.name = trimmedName;
+    }
+    if (trimmedBio !== (profile.bio ?? "")) {
+      updates.bio = trimmedBio;
+    }
+    if (trimmedPhone !== (profile.phone ?? "")) {
+      updates.phone = trimmedPhone;
+    }
+    if (localAvatarUri) {
+      updates.profilePicUri = localAvatarUri;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      Alert.alert("No Changes", "There are no updates to save.");
+      return;
+    }
+
     try {
-      setIsSaving(true);
-      const apiRoot = getEnvApiRootUrl();
-      
-      console.log("Saving profile with data:", {
-        name: displayName,
-        bio: bio,
-        phone: phone,
-      });
-      
-      const response = await fetch(`${apiRoot}/user/edit_profile`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          name: displayName,
-          bio: bio,
-          phone: phone,
-        }),
-      });
-
-      const responseText = await response.text();
-      console.log("Update profile response:", responseText);
-      
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error("Failed to parse update response:", responseText);
-        throw new Error("Invalid response from server");
-      }
-
-      if (data.success) {
-        const refreshResult = await refreshAuthUser();
-        console.log("Auth refresh after update:", refreshResult);
-        
-        Alert.alert("Success", "Profile updated successfully!", [
-          { text: "OK", onPress: () => router.back() },
-        ]);
-      } else {
-        Alert.alert("Error", data.error || "Failed to update profile.");
-      }
+      await updateProfile(updates);
+      await refreshProfile();
+      setLocalAvatarUri(null);
+      Alert.alert("Success", "Profile updated successfully!", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error("Error updating profile:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       Alert.alert("Error", `Failed to update profile: ${errorMessage}`);
-    } finally {
-      setIsSaving(false);
     }
   };
 
-  if (isLoading) {
+  if (isProfileLoading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -224,15 +136,17 @@ export default function EditProfileScreen() {
     );
   }
 
+  const displayedAvatar = localAvatarUri ?? remoteAvatar ?? fallbackAvatar;
+
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View style={[styles.header, { paddingTop: insets.top }]}> 
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeft color={theme.colors.text} size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity onPress={handleSave} disabled={isSaving}>
-          {isSaving ? (
+        <TouchableOpacity onPress={handleSave} disabled={isUpdatingProfile} testID="profile-save-button">
+          {isUpdatingProfile ? (
             <ActivityIndicator size="small" color={theme.colors.primary} />
           ) : (
             <Check color={theme.colors.primary} size={24} />
@@ -242,16 +156,17 @@ export default function EditProfileScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.avatarSection}>
-          <Image 
-            source={{ uri: profilePic || authUser?.avatar || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }} 
-            style={styles.avatar} 
+          <Image
+            source={{ uri: displayedAvatar || fallbackAvatar }}
+            style={styles.avatar}
           />
-          <TouchableOpacity 
-            style={styles.changeAvatarBtn} 
+          <TouchableOpacity
+            style={styles.changeAvatarBtn}
             onPress={pickProfilePicture}
-            disabled={uploadingAvatar || isSaving}
+            disabled={isUpdatingProfile}
+            testID="profile-change-avatar-button"
           >
-            {uploadingAvatar ? (
+            {isUpdatingProfile ? (
               <ActivityIndicator size="small" color={theme.colors.primary} />
             ) : (
               <>
@@ -271,7 +186,7 @@ export default function EditProfileScreen() {
               onChangeText={setDisplayName}
               placeholder="Enter display name"
               placeholderTextColor={theme.colors.textSecondary}
-              editable={!isSaving}
+              editable={!isUpdatingProfile}
             />
           </View>
 
@@ -312,7 +227,7 @@ export default function EditProfileScreen() {
               placeholderTextColor={theme.colors.textSecondary}
               multiline
               numberOfLines={4}
-              editable={!isSaving}
+              editable={!isUpdatingProfile}
             />
           </View>
 
@@ -325,7 +240,7 @@ export default function EditProfileScreen() {
               placeholder="Enter phone number"
               placeholderTextColor={theme.colors.textSecondary}
               keyboardType="phone-pad"
-              editable={!isSaving}
+              editable={!isUpdatingProfile}
             />
           </View>
         </View>

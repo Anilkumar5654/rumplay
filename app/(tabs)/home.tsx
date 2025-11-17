@@ -22,6 +22,7 @@ import { categories } from "../../mocks/data";
 import { Video } from "../../types";
 import { useRequireAuth } from "../../hooks/useRequireAuth";
 import { RecommendationEngine } from "../../utils/recommendationEngine";
+import { useProfileData } from "@/hooks/useProfileData";
 
 const { width } = Dimensions.get("window");
 
@@ -31,6 +32,7 @@ export default function HomeScreen() {
   const requireAuth = useRequireAuth();
   const { videos, currentUser } = useAppState();
   const { authUser } = useAuth();
+  const { profile } = useProfileData();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -171,10 +173,10 @@ export default function HomeScreen() {
             >
               <Plus color={theme.colors.primary} size={24} />
             </TouchableOpacity>
-            {authUser && (
+            {(profile || authUser) && (
               <TouchableOpacity onPress={() => router.push("/(tabs)/profile")}>
                 <Image 
-                  source={{ uri: authUser.avatar || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }} 
+                  source={{ uri: (profile?.avatar ?? authUser?.avatar) || "https://api.dicebear.com/7.x/thumbs/svg?seed=profile" }} 
                   style={styles.profileAvatar} 
                 />
               </TouchableOpacity>

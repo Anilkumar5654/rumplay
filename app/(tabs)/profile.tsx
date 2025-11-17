@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -9,6 +9,7 @@ import { theme } from "../../constants/theme";
 import { useAppState } from "../../contexts/AppStateContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getEnvApiRootUrl } from "@/utils/env";
+import { useProfileData } from "@/hooks/useProfileData";
 
 const { width } = Dimensions.get("window");
 
@@ -17,12 +18,36 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser, channels, videos } = useAppState();
   const { authUser, isAuthenticated, isAuthLoading, roleDestination, logout, authToken } = useAuth();
+  const { profile, isProfileLoading, refreshProfile } = useProfileData();
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [showMyVideos, setShowMyVideos] = useState(false);
-  const [profileData, setProfileData] = useState<any>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [myUploadedVideos, setMyUploadedVideos] = useState<any[]>([]);
+
+  const fetchMyVideos = useCallback(async () => {
+    const apiRoot = getEnvApiRootUrl();
+    if (!authToken) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${apiRoot}/user/uploads`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.videos) {
+        setMyUploadedVideos(data.videos);
+      }
+    } catch (error) {
+      console.error("Error fetching my videos:", error);
+    }
+  }, [authToken]);
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
@@ -32,101 +57,32 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (isAuthenticated && authUser) {
-      fetchProfileData();
+      refreshProfile();
       fetchMyVideos();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, authUser]);
+  }, [isAuthenticated, authUser, refreshProfile, fetchMyVideos]);
 
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated && authUser) {
-        console.log("Profile screen focused, refreshing data...");
-        fetchProfileData();
+        console.log("Profile screen focused, refreshing profile data");
+        refreshProfile();
       }
-    }, [isAuthenticated, authUser])
+    }, [isAuthenticated, authUser, refreshProfile])
   );
-
-  const fetchProfileData = async () => {
-    if (!authUser || !authToken) return;
-    
-    try {
-      setIsLoadingProfile(true);
-      const apiRoot = getEnvApiRootUrl();
-      const apiBaseUrl = apiRoot.replace('/api', '');
-      
-      console.log("Fetching profile for user:", authUser.id);
-      
-      const response = await fetch(`${apiRoot}/user/my_profile`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
-
-      const data = await response.json();
-      console.log("Profile data received:", data);
-      
-      if (data.success && data.user) {
-        let avatarUrl = data.user.avatar;
-        
-        if (avatarUrl && avatarUrl.startsWith('/uploads/')) {
-          avatarUrl = `${apiBaseUrl}${avatarUrl}`;
-        }
-        
-        console.log("Processed avatar URL:", avatarUrl);
-        
-        const processedUser = {
-          ...data.user,
-          avatar: avatarUrl
-        };
-        setProfileData(processedUser);
-      } else {
-        console.error('Failed to fetch profile:', data.error);
-      }
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  };
-
-  const fetchMyVideos = async () => {
-    if (!authToken) return;
-    
-    try {
-      const apiRoot = getEnvApiRootUrl();
-      const response = await fetch(`${apiRoot}/user/uploads`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
-
-      const data = await response.json();
-      
-      if (data.success && data.videos) {
-        setMyUploadedVideos(data.videos);
-      }
-    } catch (error) {
-      console.error('Error fetching my videos:', error);
-    }
-  };
 
   const handleLogout = () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      "Logout",
+      "Are you sure you want to logout?",
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Logout',
-          style: 'destructive',
+          text: "Logout",
+          style: "destructive",
           onPress: async () => {
             await logout();
-            router.replace('/login');
+            router.replace("/login");
           },
         },
       ]
@@ -134,26 +90,14 @@ export default function ProfileScreen() {
   };
 
   const activeUser = useMemo(() => {
-    if (profileData) {
-      return {
-        ...authUser,
-        displayName: profileData.displayName || authUser?.displayName,
-        username: profileData.username || authUser?.username,
-        avatar: profileData.avatar || authUser?.avatar,
-        bio: profileData.bio || authUser?.bio || '',
-        phone: profileData.phone || authUser?.phone,
-        email: profileData.email || authUser?.email,
-        role: profileData.role || authUser?.role,
-        id: profileData.id || authUser?.id,
-        channelId: authUser?.channelId,
-        subscriptions: authUser?.subscriptions || [],
-        likedVideos: authUser?.likedVideos || [],
-        watchHistory: authUser?.watchHistory || [],
-        savedVideos: authUser?.savedVideos || [],
-      };
+    if (profile) {
+      return profile;
     }
-    return authUser ?? currentUser;
-  }, [profileData, authUser, currentUser]);
+    if (authUser) {
+      return authUser;
+    }
+    return currentUser;
+  }, [profile, authUser, currentUser]);
 
   const userChannel = activeUser.channelId
     ? channels.find((ch) => ch.id === activeUser.channelId)
@@ -162,27 +106,27 @@ export default function ProfileScreen() {
   const myVideos = useMemo(() => {
     if (myUploadedVideos.length > 0) {
       const apiRoot = getEnvApiRootUrl();
-      const apiBaseUrl = apiRoot.replace('/api', '');
+      const apiBaseUrl = apiRoot.replace("/api", "");
       return myUploadedVideos.map((v): Video => ({
         id: v.id,
         title: v.title,
-        description: v.description || '',
-        thumbnail: v.thumbnail ? `${apiBaseUrl}${v.thumbnail}` : '',
-        videoUrl: v.video_url ? `${apiBaseUrl}${v.video_url}` : '',
-        channelId: v.channel_id || '',
-        channelName: v.channel_name || '',
-        channelAvatar: v.channel_avatar || '',
+        description: v.description || "",
+        thumbnail: v.thumbnail ? `${apiBaseUrl}${v.thumbnail}` : "",
+        videoUrl: v.video_url ? `${apiBaseUrl}${v.video_url}` : "",
+        channelId: v.channel_id || "",
+        channelName: v.channel_name || "",
+        channelAvatar: v.channel_avatar ? `${apiBaseUrl}${v.channel_avatar}` : "",
         views: parseInt(v.views) || 0,
         likes: parseInt(v.likes) || 0,
         dislikes: parseInt(v.dislikes) || 0,
         uploadDate: v.created_at || new Date().toISOString(),
         duration: parseInt(v.duration) || 0,
-        category: v.category || 'Other',
-        tags: v.tags ? (Array.isArray(v.tags) ? v.tags : v.tags.split(',')) : [],
+        category: v.category || "Other",
+        tags: v.tags ? (Array.isArray(v.tags) ? v.tags : v.tags.split(",")) : [],
         comments: [],
         isShort: v.is_short === 1 || v.is_short === true,
         isLive: false,
-        visibility: (v.privacy || 'public') as 'public' | 'private' | 'unlisted' | 'scheduled',
+        visibility: (v.privacy || "public") as "public" | "private" | "unlisted" | "scheduled",
         uploaderId: v.user_id,
       }));
     }
@@ -272,7 +216,7 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
-  if (isAuthLoading || isLoadingProfile) {
+  if (isAuthLoading || isProfileLoading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -283,7 +227,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View style={[styles.header, { paddingTop: insets.top }]}> 
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
 
@@ -374,7 +318,7 @@ export default function ProfileScreen() {
                       <View style={styles.videoTypeSection}>
                         <Text style={styles.videoTypeTitle}>Videos ({myRegularVideos.length})</Text>
                         <View style={styles.videosGrid}>
-                          {myRegularVideos.map(renderVideoItem)}
+                          {myRegularVideos.map((video) => renderVideoItem(video))}
                         </View>
                       </View>
                     )}
@@ -383,7 +327,7 @@ export default function ProfileScreen() {
                       <View style={styles.videoTypeSection}>
                         <Text style={styles.videoTypeTitle}>Shorts ({myShorts.length})</Text>
                         <View style={styles.videosGrid}>
-                          {myShorts.map(renderVideoItem)}
+                          {myShorts.map((video) => renderVideoItem(video))}
                         </View>
                       </View>
                     )}
