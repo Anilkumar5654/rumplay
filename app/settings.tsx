@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -21,7 +21,7 @@ import {
   Play,
   Minimize2,
   Music,
-  PictureInPicture,
+  Tv,
   Bell,
   Trash2,
   Database,
@@ -29,6 +29,7 @@ import {
   Download,
   Code,
 } from "lucide-react-native";
+import ScreenErrorBoundary from "@/components/ScreenErrorBoundary";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,6 +57,10 @@ export default function SettingsScreen() {
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
   const [showDeveloperOptions, setShowDeveloperOptions] = useState<boolean>(false);
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
 
   const handleSettingChange = async <K extends keyof Settings>(
     key: K,
@@ -90,7 +95,7 @@ export default function SettingsScreen() {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -113,7 +118,7 @@ export default function SettingsScreen() {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -140,7 +145,7 @@ export default function SettingsScreen() {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -163,7 +168,7 @@ export default function SettingsScreen() {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -195,369 +200,354 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <ArrowLeft color={theme.colors.text} size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              {localSettings.theme === "dark" ? (
-                <Moon style={styles.settingIcon} color={theme.colors.text} size={24} />
-              ) : (
-                <Sun style={styles.settingIcon} color={theme.colors.text} size={24} />
-              )}
-              <View>
-                <Text style={styles.settingLabel}>Theme</Text>
-                <Text style={styles.settingDescription}>
-                  {localSettings.theme === "dark" ? "Dark Mode" : "Light Mode"}
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={localSettings.theme === "dark"}
-              onValueChange={(value) => {
-                void handleSettingChange("theme", value ? "dark" : "light");
-              }}
-              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Palette style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <Text style={styles.settingLabel}>Accent Color</Text>
-            </View>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.colorsScroll}
-            contentContainerStyle={styles.colorsContainer}
-          >
-            {ACCENT_COLORS.map((color) => {
-              const isActive = localSettings.accentColor === color.value;
-              return (
-                <TouchableOpacity
-                  key={color.value}
-                  testID={`accent-color-${color.name.toLowerCase()}`}
-                  style={[
-                    styles.colorOption,
-                    isActive ? styles.colorOptionActive : undefined,
-                  ]}
-                  onPress={() => void handleSettingChange("accentColor", color.value)}
-                >
-                  <View style={[styles.colorInner, { backgroundColor: color.value }]} />
-                  {isActive && <View style={styles.colorCheck} />}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+    <ScreenErrorBoundary onReset={() => setLocalSettings(settings)}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <ArrowLeft color={theme.colors.text} size={24} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Settings</Text>
+          <View style={{ width: 24 }} />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Playback</Text>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Appearance</Text>
 
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Play style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <View>
-                <Text style={styles.settingLabel}>Autoplay Next</Text>
-                <Text style={styles.settingDescription}>
-                  Play next video automatically
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={localSettings.autoPlayNext}
-              onValueChange={(value) => {
-                void handleSettingChange("autoPlayNext", value);
-              }}
-              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Wifi style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <View>
-                <Text style={styles.settingLabel}>WiFi Only</Text>
-                <Text style={styles.settingDescription}>
-                  Autoplay only on WiFi
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={localSettings.autoPlayOnWifiOnly}
-              onValueChange={(value) => {
-                void handleSettingChange("autoPlayOnWifiOnly", value);
-              }}
-              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Play style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <View>
-                <Text style={styles.settingLabel}>Autoplay on Open</Text>
-                <Text style={styles.settingDescription}>
-                  Start playing when video opens
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={localSettings.autoPlayOnOpen}
-              onValueChange={(value) => {
-                void handleSettingChange("autoPlayOnOpen", value);
-              }}
-              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Minimize2 style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <View>
-                <Text style={styles.settingLabel}>Mini Player</Text>
-                <Text style={styles.settingDescription}>
-                  Enable swipe-down mini player
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={localSettings.miniPlayerEnabled}
-              onValueChange={(value) => {
-                void handleSettingChange("miniPlayerEnabled", value);
-              }}
-              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Music style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <View>
-                <Text style={styles.settingLabel}>Background Audio</Text>
-                <Text style={styles.settingDescription}>
-                  Continue playing in background
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={localSettings.backgroundAudioEnabled}
-              onValueChange={(value) => {
-                void handleSettingChange("backgroundAudioEnabled", value);
-              }}
-              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          {Platform.OS !== "web" && (
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
-                <PictureInPicture style={styles.settingIcon} color={theme.colors.text} size={24} />
+                {localSettings.theme === "dark" ? (
+                  <Moon style={styles.settingIcon} color={theme.colors.text} size={24} />
+                ) : (
+                  <Sun style={styles.settingIcon} color={theme.colors.text} size={24} />
+                )}
                 <View>
-                  <Text style={styles.settingLabel}>Picture-in-Picture</Text>
+                  <Text style={styles.settingLabel}>Theme</Text>
                   <Text style={styles.settingDescription}>
-                    Enable PiP mode
+                    {localSettings.theme === "dark" ? "Dark Mode" : "Light Mode"}
                   </Text>
                 </View>
               </View>
               <Switch
-                value={localSettings.pipEnabled}
+                value={localSettings.theme === "dark"}
                 onValueChange={(value) => {
-                  void handleSettingChange("pipEnabled", value);
+                  void handleSettingChange("theme", value ? "dark" : "light");
                 }}
                 trackColor={{ false: theme.colors.border, true: String(accentColor) }}
                 thumbColor="#FFFFFF"
               />
             </View>
-          )}
 
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Download style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <Text style={styles.settingLabel}>Video Quality</Text>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Palette style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <Text style={styles.settingLabel}>Accent Color</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.qualityContainer}>
-            {VIDEO_QUALITIES.map((quality) => {
-              const isSelected = localSettings.videoQuality === quality;
-              const bgColor = String(accentColor);
-              const borderColorValue = String(accentColor);
-              return (
-                <TouchableOpacity
-                  key={quality}
-                  testID={`quality-${quality}`}
-                  style={[
-                    styles.qualityOption,
-                    isSelected
-                      ? {
-                          backgroundColor: bgColor,
-                          borderColor: borderColorValue,
-                        }
-                      : undefined,
-                  ]}
-                  onPress={() => void handleSettingChange("videoQuality", quality)}
-                >
-                  <Text
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.colorsScroll}
+              contentContainerStyle={styles.colorsContainer}
+            >
+              {ACCENT_COLORS.map((color) => {
+                const isActive = localSettings.accentColor === color.value;
+                return (
+                  <TouchableOpacity
+                    key={color.value}
+                    testID={`accent-color-${color.name.toLowerCase()}`}
                     style={[
-                      styles.qualityText,
-                      isSelected ? styles.qualityTextActive : undefined,
+                      styles.colorOption,
+                      isActive ? styles.colorOptionActive : undefined,
                     ]}
+                    onPress={() => void handleSettingChange("accentColor", color.value)}
                   >
-                    {quality === "auto" ? "Auto" : quality}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <View style={[styles.colorInner, { backgroundColor: color.value }]} />
+                    {isActive && <View style={styles.colorCheck} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notifications</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Playback</Text>
 
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Bell style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <View>
-                <Text style={styles.settingLabel}>Enable Notifications</Text>
-                <Text style={styles.settingDescription}>
-                  Get notified about uploads
-                </Text>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Play style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <View>
+                  <Text style={styles.settingLabel}>Autoplay Next</Text>
+                  <Text style={styles.settingDescription}>Play next video automatically</Text>
+                </View>
               </View>
+              <Switch
+                value={localSettings.autoPlayNext}
+                onValueChange={(value) => {
+                  void handleSettingChange("autoPlayNext", value);
+                }}
+                trackColor={{ false: theme.colors.border, true: String(accentColor) }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-            <Switch
-              value={localSettings.notificationsEnabled}
-              onValueChange={(value) => {
-                void handleSettingChange("notificationsEnabled", value);
-              }}
-              trackColor={{ false: theme.colors.border, true: String(accentColor) }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data Management</Text>
-
-          <TouchableOpacity style={styles.settingItem} onPress={handleClearWatchHistory}>
-            <View style={styles.settingLeft}>
-              <Trash2 style={styles.settingIcon} color={theme.colors.error} size={24} />
-              <Text style={[styles.settingLabel, { color: theme.colors.error }]}>
-                Clear Watch History
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingItem} onPress={handleClearCache}>
-            <View style={styles.settingLeft}>
-              <Database style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <Text style={styles.settingLabel}>Clear Cache</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingItem} onPress={handleExportData}>
-            <View style={styles.settingLeft}>
-              <Download style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <Text style={styles.settingLabel}>Export Data</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-
-          <TouchableOpacity
-            style={styles.settingItem}
-            onPress={() => router.push("/edit-profile")}
-          >
-            <View style={styles.settingLeft}>
-              <User style={styles.settingIcon} color={theme.colors.text} size={24} />
-              <View>
-                <Text style={styles.settingLabel}>Manage Account</Text>
-                <Text style={styles.settingDescription}>
-                  Edit profile and preferences
-                </Text>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Wifi style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <View>
+                  <Text style={styles.settingLabel}>WiFi Only</Text>
+                  <Text style={styles.settingDescription}>Autoplay only on WiFi</Text>
+                </View>
               </View>
+              <Switch
+                value={localSettings.autoPlayOnWifiOnly}
+                onValueChange={(value) => {
+                  void handleSettingChange("autoPlayOnWifiOnly", value);
+                }}
+                trackColor={{ false: theme.colors.border, true: String(accentColor) }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            testID="logout-button"
-            style={[styles.settingItem, styles.logoutButton]}
-            onPress={handleLogout}
-            disabled={isLoggingOut}
-          >
-            <View style={styles.settingLeft}>
-              <Text style={styles.logoutLabel}>{isLoggingOut ? "Signing out..." : "Logout"}</Text>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Play style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <View>
+                  <Text style={styles.settingLabel}>Autoplay on Open</Text>
+                  <Text style={styles.settingDescription}>Start playing when video opens</Text>
+                </View>
+              </View>
+              <Switch
+                value={localSettings.autoPlayOnOpen}
+                onValueChange={(value) => {
+                  void handleSettingChange("autoPlayOnOpen", value);
+                }}
+                trackColor={{ false: theme.colors.border, true: String(accentColor) }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.settingItem}
-            onPress={() => setShowDeveloperOptions(!showDeveloperOptions)}
-          >
-            <View style={styles.settingLeft}>
-              <Code style={styles.settingIcon} color={theme.colors.textSecondary} size={24} />
-              <Text style={styles.settingLabel}>Developer Options</Text>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Minimize2 style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <View>
+                  <Text style={styles.settingLabel}>Mini Player</Text>
+                  <Text style={styles.settingDescription}>Enable swipe-down mini player</Text>
+                </View>
+              </View>
+              <Switch
+                value={localSettings.miniPlayerEnabled}
+                onValueChange={(value) => {
+                  void handleSettingChange("miniPlayerEnabled", value);
+                }}
+                trackColor={{ false: theme.colors.border, true: String(accentColor) }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-          </TouchableOpacity>
 
-          {showDeveloperOptions && (
-            <>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Music style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <View>
+                  <Text style={styles.settingLabel}>Background Audio</Text>
+                  <Text style={styles.settingDescription}>Continue playing in background</Text>
+                </View>
+              </View>
+              <Switch
+                value={localSettings.backgroundAudioEnabled}
+                onValueChange={(value) => {
+                  void handleSettingChange("backgroundAudioEnabled", value);
+                }}
+                trackColor={{ false: theme.colors.border, true: String(accentColor) }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {Platform.OS !== "web" && (
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>Experimental Features</Text>
+                  <Tv style={styles.settingIcon} color={theme.colors.text} size={24} />
+                  <View>
+                    <Text style={styles.settingLabel}>Picture-in-Picture</Text>
+                    <Text style={styles.settingDescription}>Enable PiP mode</Text>
+                  </View>
                 </View>
                 <Switch
-                  value={localSettings.experimentalFeatures}
+                  value={localSettings.pipEnabled}
                   onValueChange={(value) => {
-                    void handleSettingChange("experimentalFeatures", value);
+                    void handleSettingChange("pipEnabled", value);
                   }}
                   trackColor={{ false: theme.colors.border, true: String(accentColor) }}
                   thumbColor="#FFFFFF"
                 />
               </View>
+            )}
 
-              <View style={styles.devInfo}>
-                <Text style={styles.devInfoText}>Videos: {videos.length}</Text>
-                <Text style={styles.devInfoText}>Channels: {channels.length}</Text>
-                <Text style={styles.devInfoText}>Platform: {Platform.OS}</Text>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Download style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <Text style={styles.settingLabel}>Video Quality</Text>
               </View>
+            </View>
 
-              <TouchableOpacity style={styles.dangerButton} onPress={handleResetApp}>
-                <Text style={styles.dangerButtonText}>Reset App Data</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+            <View style={styles.qualityContainer}>
+              {VIDEO_QUALITIES.map((quality) => {
+                const isSelected = localSettings.videoQuality === quality;
+                const accentValue = String(accentColor);
+                return (
+                  <TouchableOpacity
+                    key={quality}
+                    testID={`quality-${quality}`}
+                    style={[
+                      styles.qualityOption,
+                      isSelected
+                        ? {
+                            backgroundColor: accentValue,
+                            borderColor: accentValue,
+                          }
+                        : undefined,
+                    ]}
+                    onPress={() => void handleSettingChange("videoQuality", quality)}
+                  >
+                    <Text
+                      style={[
+                        styles.qualityText,
+                        isSelected ? styles.qualityTextActive : undefined,
+                      ]}
+                    >
+                      {quality === "auto" ? "Auto" : quality}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>PlayTube v1.0.0</Text>
-          <Text style={styles.footerText}>Made with ❤️</Text>
-        </View>
-      </ScrollView>
-    </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Notifications</Text>
+
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Bell style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <View>
+                  <Text style={styles.settingLabel}>Enable Notifications</Text>
+                  <Text style={styles.settingDescription}>Get notified about uploads</Text>
+                </View>
+              </View>
+              <Switch
+                value={localSettings.notificationsEnabled}
+                onValueChange={(value) => {
+                  void handleSettingChange("notificationsEnabled", value);
+                }}
+                trackColor={{ false: theme.colors.border, true: String(accentColor) }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Data Management</Text>
+
+            <TouchableOpacity style={styles.settingItem} onPress={handleClearWatchHistory}>
+              <View style={styles.settingLeft}>
+                <Trash2 style={styles.settingIcon} color={theme.colors.error} size={24} />
+                <Text style={[styles.settingLabel, { color: theme.colors.error }]}>Clear Watch History</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.settingItem} onPress={handleClearCache}>
+              <View style={styles.settingLeft}>
+                <Database style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <Text style={styles.settingLabel}>Clear Cache</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.settingItem} onPress={handleExportData}>
+              <View style={styles.settingLeft}>
+                <Download style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <Text style={styles.settingLabel}>Export Data</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => router.push("/edit-profile")}
+            >
+              <View style={styles.settingLeft}>
+                <User style={styles.settingIcon} color={theme.colors.text} size={24} />
+                <View>
+                  <Text style={styles.settingLabel}>Manage Account</Text>
+                  <Text style={styles.settingDescription}>Edit profile and preferences</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              testID="logout-button"
+              style={[styles.settingItem, styles.logoutButton]}
+              onPress={handleLogout}
+              disabled={isLoggingOut}
+            >
+              <View style={styles.settingLeft}>
+                <Text style={styles.logoutLabel}>
+                  {isLoggingOut ? "Signing out..." : "Logout"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => setShowDeveloperOptions(!showDeveloperOptions)}
+            >
+              <View style={styles.settingLeft}>
+                <Code style={styles.settingIcon} color={theme.colors.textSecondary} size={24} />
+                <Text style={styles.settingLabel}>Developer Options</Text>
+              </View>
+            </TouchableOpacity>
+
+            {showDeveloperOptions && (
+              <>
+                <View style={styles.settingItem}>
+                  <View style={styles.settingLeft}>
+                    <Text style={styles.settingLabel}>Experimental Features</Text>
+                  </View>
+                  <Switch
+                    value={localSettings.experimentalFeatures}
+                    onValueChange={(value) => {
+                      void handleSettingChange("experimentalFeatures", value);
+                    }}
+                    trackColor={{ false: theme.colors.border, true: String(accentColor) }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                <View style={styles.devInfo}>
+                  <Text style={styles.devInfoText}>Videos: {videos.length}</Text>
+                  <Text style={styles.devInfoText}>Channels: {channels.length}</Text>
+                  <Text style={styles.devInfoText}>Platform: {Platform.OS}</Text>
+                </View>
+
+                <TouchableOpacity style={styles.dangerButton} onPress={handleResetApp}>
+                  <Text style={styles.dangerButtonText}>Reset App Data</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>PlayTube v1.0.0</Text>
+            <Text style={styles.footerText}>Made with ❤️</Text>
+          </View>
+        </ScrollView>
+      </View>
+    </ScreenErrorBoundary>
   );
 }
 
