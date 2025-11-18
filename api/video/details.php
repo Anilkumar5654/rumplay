@@ -64,8 +64,25 @@ foreach ($comments as &$comment) {
     unset($comment['username'], $comment['name'], $comment['profile_pic']);
 }
 
-$stmt = $db->prepare("UPDATE videos SET views = views + 1 WHERE id = :video_id");
-$stmt->execute(['video_id' => $videoId]);
+$user = getAuthUser();
+$video['is_liked'] = false;
+$video['is_disliked'] = false;
+$video['is_saved'] = false;
+
+if ($user) {
+    $stmt = $db->prepare("
+        SELECT COUNT(*) as is_liked
+        FROM video_likes
+        WHERE video_id = :video_id AND user_id = :user_id
+    ");
+    $stmt->execute([
+        'video_id' => $videoId,
+        'user_id' => $user['id']
+    ]);
+    $video['is_liked'] = (int)$stmt->fetch()['is_liked'] > 0;
+}
+
+$video['comments_count'] = count($comments);
 
 respond([
     'success' => true,
