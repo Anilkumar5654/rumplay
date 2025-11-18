@@ -451,7 +451,13 @@ export default function ChannelScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.push('/(tabs)/profile');
+          }
+        }}>
           <ArrowLeft color={theme.colors.text} size={24} />
         </TouchableOpacity>
         {isOwnChannel && (
