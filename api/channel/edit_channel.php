@@ -13,21 +13,32 @@ $channelStmt->execute(['user_id' => $user['id']]);
 $channel = $channelStmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$channel) {
-    respond(['success' => false, 'error' => 'Channel not found'], 404);
+    respond(['success' => false, 'error' => 'Channel not found. You do not own a channel.'], 404);
 }
 
-$rawBody = file_get_contents('php://input');
-$input = json_decode($rawBody, true);
+$contentType = $_SERVER['CONTENT_TYPE'] ?? '';
 
-if (!$input) {
-    respond(['success' => false, 'error' => 'Invalid JSON payload'], 400);
+if (strpos($contentType, 'multipart/form-data') !== false) {
+    $name = $_POST['name'] ?? null;
+    $handle = $_POST['handle'] ?? null;
+    $description = $_POST['description'] ?? null;
+    
+    $avatarFile = $_FILES['avatar'] ?? null;
+    $bannerFile = $_FILES['banner'] ?? null;
+} else {
+    $rawBody = file_get_contents('php://input');
+    $input = json_decode($rawBody, true);
+    
+    if (!$input) {
+        respond(['success' => false, 'error' => 'Invalid JSON payload'], 400);
+    }
+    
+    $name = $input['name'] ?? null;
+    $handle = $input['handle'] ?? null;
+    $description = $input['description'] ?? null;
+    $avatarFile = null;
+    $bannerFile = null;
 }
-
-$name = $input['name'] ?? null;
-$handle = $input['handle'] ?? null;
-$description = $input['description'] ?? null;
-$avatar = $input['avatar'] ?? null;
-$banner = $input['banner'] ?? null;
 
 $updates = [];
 $params = ['id' => $channel['id']];
@@ -79,14 +90,73 @@ if ($description !== null) {
     $params['description'] = trim($description);
 }
 
-if ($avatar !== null && strlen(trim($avatar)) > 0) {
-    $updates[] = "avatar = :avatar";
-    $params['avatar'] = trim($avatar);
+$uploadsDir = __DIR__ . '/../uploads/channels';
+if (!is_dir($uploadsDir)) {
+    mkdir($uploadsDir, 0755, true);
 }
 
-if ($banner !== null && strlen(trim($banner)) > 0) {
-    $updates[] = "banner = :banner";
-    $params['banner'] = trim($banner);
+if ($avatarFile && $avatarFile['error'] === UPLOAD_ERR_OK) {
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    $fileType = mime_content_type($avatarFile['tmp_name']);
+    
+    if (!in_array($fileType, $allowedTypes)) {
+        respond(['success' => false, 'error' => 'Invalid avatar file type. Only JPEG, PNG, and WEBP are allowed.'], 400);
+    }
+    
+    $maxSize = 5 * 1024 * 1024;
+    if ($avatarFile['size'] > $maxSize) {
+        respond(['success' => false, 'error' => 'Avatar file size exceeds 5MB limit.'], 400);
+    }
+    
+    $extension = pathinfo($avatarFile['name'], PATHINFO_EXTENSION);
+    $fileName = 'avatar_' . $channel['id'] . '_' . time() . '.' . $extension;
+    $filePath = $uploadsDir . '/' . $fileName;
+    
+    if (move_uploaded_file($avatarFile['tmp_name'], $filePath)) {
+        $updates[] = "avatar = :avatar";
+        $params['avatar'] = '/uploads/channels/' . $fileName;
+        
+        if ($channel['avatar'] && strpos($channel['avatar'], '/uploads/') === 0) {
+            $oldAvatarPath = __DIR__ . '/..' . $channel['avatar'];
+            if (file_exists($oldAvatarPath)) {
+                unlink($oldAvatarPath);
+            }
+        }
+    } else {
+        respond(['success' => false, 'error' => 'Failed to upload avatar file.'], 500);
+    }
+}
+
+if ($bannerFile && $bannerFile['error'] === UPLOAD_ERR_OK) {
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    $fileType = mime_content_type($bannerFile['tmp_name']);
+    
+    if (!in_array($fileType, $allowedTypes)) {
+        respond(['success' => false, 'error' => 'Invalid banner file type. Only JPEG, PNG, and WEBP are allowed.'], 400);
+    }
+    
+    $maxSize = 10 * 1024 * 1024;
+    if ($bannerFile['size'] > $maxSize) {
+        respond(['success' => false, 'error' => 'Banner file size exceeds 10MB limit.'], 400);
+    }
+    
+    $extension = pathinfo($bannerFile['name'], PATHINFO_EXTENSION);
+    $fileName = 'banner_' . $channel['id'] . '_' . time() . '.' . $extension;
+    $filePath = $uploadsDir . '/' . $fileName;
+    
+    if (move_uploaded_file($bannerFile['tmp_name'], $filePath)) {
+        $updates[] = "banner = :banner";
+        $params['banner'] = '/uploads/channels/' . $fileName;
+        
+        if ($channel['banner'] && strpos($channel['banner'], '/uploads/') === 0) {
+            $oldBannerPath = __DIR__ . '/..' . $channel['banner'];
+            if (file_exists($oldBannerPath)) {
+                unlink($oldBannerPath);
+            }
+        }
+    } else {
+        respond(['success' => false, 'error' => 'Failed to upload banner file.'], 500);
+    }
 }
 
 if (empty($updates)) {
@@ -101,15 +171,28 @@ $updatedChannelStmt = $db->prepare("SELECT * FROM channels WHERE id = :id LIMIT 
 $updatedChannelStmt->execute(['id' => $channel['id']]);
 $updatedChannel = $updatedChannelStmt->fetch(PDO::FETCH_ASSOC);
 
+$apiBaseUrl = getApiBaseUrl();
+
+$avatarUrl = $updatedChannel['avatar'];
+if ($avatarUrl && strpos($avatarUrl, '/uploads/') === 0) {
+    $avatarUrl = $apiBaseUrl . $avatarUrl;
+}
+
+$bannerUrl = $updatedChannel['banner'];
+if ($bannerUrl && strpos($bannerUrl, '/uploads/') === 0) {
+    $bannerUrl = $apiBaseUrl . $bannerUrl;
+}
+
 respond([
     'success' => true,
     'channel' => [
         'id' => $updatedChannel['id'],
+        'userId' => $updatedChannel['user_id'],
         'name' => $updatedChannel['name'],
         'handle' => $updatedChannel['handle'],
         'description' => $updatedChannel['description'],
-        'avatar' => $updatedChannel['avatar'],
-        'banner' => $updatedChannel['banner'],
+        'avatar' => $avatarUrl,
+        'banner' => $bannerUrl,
         'handleLastChanged' => $updatedChannel['handle_last_changed']
     ],
     'message' => 'Channel updated successfully'

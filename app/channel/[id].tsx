@@ -14,7 +14,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CheckCircle, DollarSign, Edit3, X } from "lucide-react-native";
+import { ArrowLeft, CheckCircle, DollarSign, Edit3, X, Upload, ImageIcon } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,6 +34,25 @@ type ChannelEditData = {
   banner: string;
 };
 
+type ChannelData = {
+  id: string;
+  userId: string;
+  name: string;
+  handle: string;
+  description: string;
+  avatar: string;
+  banner: string;
+  handleLastChanged: string | null;
+  createdAt: string;
+};
+
+type ChannelApiResponse = {
+  success: boolean;
+  channel?: ChannelData;
+  error?: string;
+  message?: string;
+};
+
 export default function ChannelScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -42,6 +62,8 @@ export default function ChannelScreen() {
 
   const channelId = params.id as string;
   const [channel, setChannel] = useState(getChannelById(channelId) || defaultChannel);
+  const [channelData, setChannelData] = useState<ChannelData | null>(null);
+  const [, setIsLoadingChannel] = useState(true);
   const [selectedTab, setSelectedTab] = useState<TabType>("Videos");
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [editData, setEditData] = useState<ChannelEditData>({
@@ -51,9 +73,15 @@ export default function ChannelScreen() {
     avatar: channel.avatar,
     banner: channel.banner,
   });
+  const [avatarFile, setAvatarFile] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [bannerFile, setBannerFile] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const isOwnChannel = currentUser.channelId === channelId || authUser?.channelId === channelId;
+  const isOwnChannel = useMemo(() => {
+    if (!authUser || !channelData) return false;
+    return authUser.id === channelData.userId || authUser.channelId === channelId;
+  }, [authUser, channelData, channelId]);
+  
   const isSubscribed = currentUser.subscriptions.some((s) => s.channelId === channelId);
 
   const apiRoot = useMemo(() => getEnvApiRootUrl(), []);
@@ -73,6 +101,61 @@ export default function ChannelScreen() {
     return count.toString();
   };
 
+  const fetchChannelData = useCallback(async () => {
+    try {
+      setIsLoadingChannel(true);
+      const endpoint = `${apiRoot}/channel/view_channel?id=${channelId}`;
+      console.log('[ChannelScreen] GET', endpoint);
+      
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      const data = (await response.json()) as ChannelApiResponse;
+      
+      if (data.success && data.channel) {
+        setChannelData(data.channel);
+        setChannel({
+          ...channel,
+          name: data.channel.name,
+          handle: data.channel.handle,
+          description: data.channel.description,
+          avatar: data.channel.avatar,
+          banner: data.channel.banner,
+        });
+      }
+    } catch (error) {
+      console.error('[ChannelScreen] fetchChannelData error', error);
+    } finally {
+      setIsLoadingChannel(false);
+    }
+  }, [apiRoot, channelId, channel]);
+
+  const pickImage = useCallback(async (type: 'avatar' | 'banner') => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images' as ImagePicker.MediaTypeOptions,
+        allowsEditing: true,
+        aspect: type === 'avatar' ? [1, 1] : [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        if (type === 'avatar') {
+          setAvatarFile(result.assets[0]);
+        } else {
+          setBannerFile(result.assets[0]);
+        }
+      }
+    } catch (error) {
+      console.error('[ChannelScreen] pickImage error', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  }, []);
+
   const handleEditChannel = useCallback(async () => {
     if (!authToken) {
       Alert.alert('Authentication required', 'Please login to edit your channel.');
@@ -90,44 +173,47 @@ export default function ChannelScreen() {
       const endpoint = `${apiRoot}/channel/edit_channel`;
       console.log('[ChannelScreen] POST', endpoint);
       
-      const payload: Record<string, string> = {};
+      const formData = new FormData();
       
       if (editData.name.trim()) {
-        payload.name = editData.name.trim();
+        formData.append('name', editData.name.trim());
       }
       
       if (editData.handle.trim()) {
-        payload.handle = editData.handle.trim();
+        formData.append('handle', editData.handle.trim());
       }
       
       if (editData.description.trim()) {
-        payload.description = editData.description.trim();
+        formData.append('description', editData.description.trim());
       }
       
-      if (editData.avatar.trim()) {
-        payload.avatar = editData.avatar.trim();
+      if (avatarFile) {
+        const uriParts = avatarFile.uri.split('.');
+        const fileType = uriParts[uriParts.length - 1];
+        formData.append('avatar', {
+          uri: avatarFile.uri,
+          name: `avatar.${fileType}`,
+          type: `image/${fileType}`,
+        } as any);
       }
       
-      if (editData.banner.trim()) {
-        payload.banner = editData.banner.trim();
+      if (bannerFile) {
+        const uriParts = bannerFile.uri.split('.');
+        const fileType = uriParts[uriParts.length - 1];
+        formData.append('banner', {
+          uri: bannerFile.uri,
+          name: `banner.${fileType}`,
+          type: `image/${fileType}`,
+        } as any);
       }
-      
-      if (Object.keys(payload).length === 0) {
-        Alert.alert('Validation error', 'Please provide at least one field to update.');
-        setIsSaving(false);
-        return;
-      }
-      
-      console.log('[ChannelScreen] Sending payload:', JSON.stringify(payload, null, 2));
       
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
-        body: JSON.stringify(payload),
+        body: formData,
       });
 
       const raw = await response.text();
@@ -145,6 +231,7 @@ export default function ChannelScreen() {
       }
 
       if (data.channel) {
+        setChannelData(data.channel);
         const updatedChannel = {
           ...channel,
           name: data.channel.name,
@@ -163,8 +250,11 @@ export default function ChannelScreen() {
         });
       }
 
+      setAvatarFile(null);
+      setBannerFile(null);
       setIsEditModalVisible(false);
       Alert.alert('Success', data.message || 'Channel updated successfully!');
+      await fetchChannelData();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to update channel';
       console.error('[ChannelScreen] handleEditChannel error', message, error);
@@ -172,7 +262,7 @@ export default function ChannelScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [authToken, apiRoot, editData, channel]);
+  }, [authToken, apiRoot, editData, avatarFile, bannerFile, channel, fetchChannelData]);
 
   const openEditModal = useCallback(() => {
     setEditData({
@@ -182,6 +272,8 @@ export default function ChannelScreen() {
       avatar: channel.avatar,
       banner: channel.banner,
     });
+    setAvatarFile(null);
+    setBannerFile(null);
     setIsEditModalVisible(true);
   }, [channel]);
 
@@ -191,6 +283,10 @@ export default function ChannelScreen() {
       setChannel(currentChannel);
     }
   }, [channelId, getChannelById]);
+
+  useEffect(() => {
+    fetchChannelData();
+  }, [fetchChannelData]);
 
   const tabs: TabType[] = isOwnChannel 
     ? ["Videos", "Shorts", "About", "Manage"]
@@ -465,29 +561,39 @@ export default function ChannelScreen() {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Avatar URL</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={editData.avatar}
-                  onChangeText={(text) => setEditData({ ...editData, avatar: text })}
-                  placeholder="https://example.com/avatar.jpg"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  editable={!isSaving}
-                  autoCapitalize="none"
-                />
+                <Text style={styles.formLabel}>Avatar</Text>
+                <TouchableOpacity
+                  style={styles.imagePicker}
+                  onPress={() => pickImage('avatar')}
+                  disabled={isSaving}
+                >
+                  {avatarFile ? (
+                    <Image source={{ uri: avatarFile.uri }} style={styles.imagePreview} />
+                  ) : (
+                    <View style={styles.imagePickerPlaceholder}>
+                      <ImageIcon color={theme.colors.textSecondary} size={32} />
+                      <Text style={styles.imagePickerText}>Tap to select avatar</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Banner URL</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={editData.banner}
-                  onChangeText={(text) => setEditData({ ...editData, banner: text })}
-                  placeholder="https://example.com/banner.jpg"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  editable={!isSaving}
-                  autoCapitalize="none"
-                />
+                <Text style={styles.formLabel}>Banner</Text>
+                <TouchableOpacity
+                  style={styles.bannerPicker}
+                  onPress={() => pickImage('banner')}
+                  disabled={isSaving}
+                >
+                  {bannerFile ? (
+                    <Image source={{ uri: bannerFile.uri }} style={styles.bannerPreview} />
+                  ) : (
+                    <View style={styles.bannerPickerPlaceholder}>
+                      <Upload color={theme.colors.textSecondary} size={32} />
+                      <Text style={styles.imagePickerText}>Tap to select banner</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
             </ScrollView>
 
@@ -881,5 +987,50 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     fontWeight: "600" as const,
     color: "#FFFFFF",
+  },
+  imagePicker: {
+    width: 120,
+    height: 120,
+    borderRadius: theme.radii.full,
+    overflow: "hidden" as const,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  imagePreview: {
+    width: "100%",
+    height: "100%",
+  },
+  imagePickerPlaceholder: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    gap: theme.spacing.xs,
+  },
+  imagePickerText: {
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
+    textAlign: "center" as const,
+  },
+  bannerPicker: {
+    width: "100%",
+    height: 150,
+    borderRadius: theme.radii.md,
+    overflow: "hidden" as const,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  bannerPreview: {
+    width: "100%",
+    height: "100%",
+  },
+  bannerPickerPlaceholder: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    gap: theme.spacing.xs,
   },
 });
