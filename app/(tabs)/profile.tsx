@@ -129,41 +129,34 @@ export default function ProfileScreen() {
     setIsChannelLoading(true);
     setChannelError(null);
 
-    const endpoints: string[] = [`${apiRoot}/channel/my`];
-    if (activeUser.channelId) {
-      endpoints.push(`${apiRoot}/channel/${activeUser.channelId}`);
-    }
-
-    let latestError: string | null = null;
-
-    for (const endpoint of endpoints) {
-      try {
-        console.log("[ProfileScreen] GET", endpoint);
-        const response = await fetch(endpoint, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-        const raw = await response.text();
-        console.log("[ProfileScreen] channel response", raw.slice(0, 160));
-        const data = parseChannelJson(raw);
-        if (!response.ok || !data.success || !data.channel) {
-          throw new Error(data.error ?? data.message ?? `Request failed with status ${response.status}`);
-        }
-        const mapped = mapChannelData(data.channel, apiBaseUrl);
-        setChannelDetails(mapped);
-        setChannelError(null);
-        return;
-      } catch (error) {
-        latestError = error instanceof Error ? error.message : "Unable to load channel details";
-        console.warn("[ProfileScreen] fetchChannelDetails failed", endpoint, latestError);
+    const endpoint = `${apiRoot}/channel/view_channel`;
+    
+    try {
+      console.log("[ProfileScreen] GET", endpoint, "(without ID to fetch logged-in user's channel)");
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      const raw = await response.text();
+      console.log("[ProfileScreen] channel response", raw.slice(0, 160));
+      const data = parseChannelJson(raw);
+      if (!response.ok || !data.success || !data.channel) {
+        throw new Error(data.error ?? data.message ?? `Request failed with status ${response.status}`);
       }
+      const mapped = mapChannelData(data.channel, apiBaseUrl);
+      setChannelDetails(mapped);
+      setChannelError(null);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to load channel details";
+      console.warn("[ProfileScreen] fetchChannelDetails failed", errorMessage);
+      setChannelDetails(null);
+      setChannelError(errorMessage);
+    } finally {
+      setIsChannelLoading(false);
     }
-
-    setChannelDetails(null);
-    setChannelError(latestError);
   }, [activeUser.channelId, apiRoot, apiBaseUrl, authToken]);
 
   const handleCreateChannel = useCallback(async () => {

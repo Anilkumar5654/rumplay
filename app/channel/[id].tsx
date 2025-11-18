@@ -44,6 +44,7 @@ type ChannelData = {
   banner: string;
   handleLastChanged: string | null;
   createdAt: string;
+  isOwner?: boolean;
 };
 
 type ChannelApiResponse = {
@@ -60,7 +61,8 @@ export default function ChannelScreen() {
   const { videos, currentUser, toggleSubscription, getChannelById } = useAppState();
   const { authUser, authToken } = useAuth();
 
-  const channelId = params.id as string;
+  const channelIdParam = params.id as string | undefined;
+  const channelId = channelIdParam ?? '';
   const [channel, setChannel] = useState(getChannelById(channelId) || defaultChannel);
   const [channelData, setChannelData] = useState<ChannelData | null>(null);
   const [, setIsLoadingChannel] = useState(true);
@@ -78,6 +80,9 @@ export default function ChannelScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   const isOwnChannel = useMemo(() => {
+    if (channelData?.isOwner !== undefined) {
+      return channelData.isOwner;
+    }
     if (!authUser || !channelData) return false;
     return authUser.id === channelData.userId || authUser.channelId === channelId;
   }, [authUser, channelData, channelId]);
@@ -104,14 +109,23 @@ export default function ChannelScreen() {
   const fetchChannelData = useCallback(async () => {
     try {
       setIsLoadingChannel(true);
-      const endpoint = `${apiRoot}/channel/view_channel?id=${channelId}`;
+      const endpoint = channelId 
+        ? `${apiRoot}/channel/view_channel?id=${channelId}`
+        : `${apiRoot}/channel/view_channel`;
+      
       console.log('[ChannelScreen] GET', endpoint);
+      
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
       
       const response = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
+        headers,
       });
 
       const data = (await response.json()) as ChannelApiResponse;
@@ -132,7 +146,7 @@ export default function ChannelScreen() {
     } finally {
       setIsLoadingChannel(false);
     }
-  }, [apiRoot, channelId, channel]);
+  }, [apiRoot, channelId, channel, authToken]);
 
   const pickImage = useCallback(async (type: 'avatar' | 'banner') => {
     try {
@@ -278,9 +292,11 @@ export default function ChannelScreen() {
   }, [channel]);
 
   useEffect(() => {
-    const currentChannel = getChannelById(channelId);
-    if (currentChannel) {
-      setChannel(currentChannel);
+    if (channelId) {
+      const currentChannel = getChannelById(channelId);
+      if (currentChannel) {
+        setChannel(currentChannel);
+      }
     }
   }, [channelId, getChannelById]);
 

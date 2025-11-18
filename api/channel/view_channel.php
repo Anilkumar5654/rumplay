@@ -6,18 +6,29 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 $channelId = $_GET['id'] ?? null;
+$authUser = getAuthUser();
+$db = getDB();
 
 if (!$channelId) {
-    respond(['success' => false, 'error' => 'Channel ID is required'], 400);
-}
-
-$db = getDB();
-$stmt = $db->prepare("SELECT * FROM channels WHERE id = :id LIMIT 1");
-$stmt->execute(['id' => $channelId]);
-$channel = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$channel) {
-    respond(['success' => false, 'error' => 'Channel not found'], 404);
+    if (!$authUser) {
+        respond(['success' => false, 'error' => 'Channel ID is required or user must be authenticated'], 400);
+    }
+    
+    $stmt = $db->prepare("SELECT * FROM channels WHERE user_id = :user_id LIMIT 1");
+    $stmt->execute(['user_id' => $authUser['id']]);
+    $channel = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$channel) {
+        respond(['success' => false, 'error' => 'You do not have a channel yet'], 404);
+    }
+} else {
+    $stmt = $db->prepare("SELECT * FROM channels WHERE id = :id LIMIT 1");
+    $stmt->execute(['id' => $channelId]);
+    $channel = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$channel) {
+        respond(['success' => false, 'error' => 'Channel not found'], 404);
+    }
 }
 
 $userStmt = $db->prepare("SELECT id FROM users WHERE id = :user_id LIMIT 1");
@@ -36,6 +47,11 @@ if ($bannerUrl && strpos($bannerUrl, '/uploads/') === 0) {
     $bannerUrl = $apiBaseUrl . $bannerUrl;
 }
 
+$isOwner = false;
+if ($authUser && $authUser['id'] === $channel['user_id']) {
+    $isOwner = true;
+}
+
 respond([
     'success' => true,
     'channel' => [
@@ -46,7 +62,14 @@ respond([
         'description' => $channel['description'] ?? '',
         'avatar' => $avatarUrl,
         'banner' => $bannerUrl,
+        'subscriberCount' => 0,
+        'totalViews' => 0,
+        'totalWatchHours' => 0,
+        'verified' => false,
+        'monetization' => false,
         'handleLastChanged' => $channel['handle_last_changed'] ?? null,
-        'createdAt' => $channel['created_at']
+        'createdAt' => $channel['created_at'],
+        'updatedAt' => $channel['updated_at'] ?? $channel['created_at'],
+        'isOwner' => $isOwner
     ]
 ]);
