@@ -90,6 +90,36 @@ export default function ChannelScreen() {
       const endpoint = `${apiRoot}/channel/edit_channel`;
       console.log('[ChannelScreen] POST', endpoint);
       
+      const payload: Record<string, string> = {};
+      
+      if (editData.name.trim()) {
+        payload.name = editData.name.trim();
+      }
+      
+      if (editData.handle.trim()) {
+        payload.handle = editData.handle.trim();
+      }
+      
+      if (editData.description.trim()) {
+        payload.description = editData.description.trim();
+      }
+      
+      if (editData.avatar.trim()) {
+        payload.avatar = editData.avatar.trim();
+      }
+      
+      if (editData.banner.trim()) {
+        payload.banner = editData.banner.trim();
+      }
+      
+      if (Object.keys(payload).length === 0) {
+        Alert.alert('Validation error', 'Please provide at least one field to update.');
+        setIsSaving(false);
+        return;
+      }
+      
+      console.log('[ChannelScreen] Sending payload:', JSON.stringify(payload, null, 2));
+      
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -97,11 +127,11 @@ export default function ChannelScreen() {
           'Accept': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
-        body: JSON.stringify(editData),
+        body: JSON.stringify(payload),
       });
 
       const raw = await response.text();
-      console.log('[ChannelScreen] edit response', raw.slice(0, 160));
+      console.log('[ChannelScreen] edit response', raw.slice(0, 300));
       
       let data;
       try {
