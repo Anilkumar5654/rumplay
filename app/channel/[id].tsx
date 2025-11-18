@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,31 +7,56 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CheckCircle, DollarSign } from "lucide-react-native";
+import { ArrowLeft, CheckCircle, DollarSign, Edit3, X } from "lucide-react-native";
 import { theme } from "@/constants/theme";
 import { useAppState } from "@/contexts/AppStateContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { defaultChannel } from "@/utils/defaults";
+import { getEnvApiRootUrl } from "@/utils/env";
 
 const { width } = Dimensions.get("window");
 
 type TabType = "Videos" | "Shorts" | "About" | "Manage";
 
+type ChannelEditData = {
+  name: string;
+  handle: string;
+  description: string;
+  avatar: string;
+  banner: string;
+};
+
 export default function ChannelScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
-  const { channels, videos, currentUser, toggleSubscription, getChannelById } = useAppState();
+  const { videos, currentUser, toggleSubscription, getChannelById } = useAppState();
+  const { authUser, authToken } = useAuth();
 
   const channelId = params.id as string;
-  const channel = getChannelById(channelId) || defaultChannel;
-
+  const [channel, setChannel] = useState(getChannelById(channelId) || defaultChannel);
   const [selectedTab, setSelectedTab] = useState<TabType>("Videos");
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [editData, setEditData] = useState<ChannelEditData>({
+    name: channel.name,
+    handle: channel.handle || '',
+    description: channel.description || '',
+    avatar: channel.avatar,
+    banner: channel.banner,
+  });
+  const [isSaving, setIsSaving] = useState(false);
 
-  const isOwnChannel = currentUser.channelId === channelId;
+  const isOwnChannel = currentUser.channelId === channelId || authUser?.channelId === channelId;
   const isSubscribed = currentUser.subscriptions.some((s) => s.channelId === channelId);
+
+  const apiRoot = useMemo(() => getEnvApiRootUrl(), []);
 
   const channelVideos = videos.filter((v) => v.channelId === channelId && !v.isShort);
   const channelShorts = videos.filter((v) => v.channelId === channelId && v.isShort);
@@ -47,6 +72,95 @@ export default function ChannelScreen() {
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count.toString();
   };
+
+  const handleEditChannel = useCallback(async () => {
+    if (!authToken) {
+      Alert.alert('Authentication required', 'Please login to edit your channel.');
+      return;
+    }
+
+    if (!editData.name.trim()) {
+      Alert.alert('Validation error', 'Channel name is required.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const endpoint = `${apiRoot}/channel/edit_channel`;
+      console.log('[ChannelScreen] POST', endpoint);
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(editData),
+      });
+
+      const raw = await response.text();
+      console.log('[ChannelScreen] edit response', raw.slice(0, 160));
+      
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error('Server returned invalid JSON');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || data.message || 'Failed to update channel');
+      }
+
+      if (data.channel) {
+        const updatedChannel = {
+          ...channel,
+          name: data.channel.name,
+          handle: data.channel.handle || channel.handle,
+          description: data.channel.description || '',
+          avatar: data.channel.avatar || channel.avatar,
+          banner: data.channel.banner || channel.banner,
+        };
+        setChannel(updatedChannel);
+        setEditData({
+          name: updatedChannel.name,
+          handle: updatedChannel.handle || '',
+          description: updatedChannel.description || '',
+          avatar: updatedChannel.avatar,
+          banner: updatedChannel.banner,
+        });
+      }
+
+      setIsEditModalVisible(false);
+      Alert.alert('Success', data.message || 'Channel updated successfully!');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update channel';
+      console.error('[ChannelScreen] handleEditChannel error', message, error);
+      Alert.alert('Update failed', message);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [authToken, apiRoot, editData, channel]);
+
+  const openEditModal = useCallback(() => {
+    setEditData({
+      name: channel.name,
+      handle: channel.handle || '',
+      description: channel.description || '',
+      avatar: channel.avatar,
+      banner: channel.banner,
+    });
+    setIsEditModalVisible(true);
+  }, [channel]);
+
+  useEffect(() => {
+    const currentChannel = getChannelById(channelId);
+    if (currentChannel) {
+      setChannel(currentChannel);
+    }
+  }, [channelId, getChannelById]);
 
   const tabs: TabType[] = isOwnChannel 
     ? ["Videos", "Shorts", "About", "Manage"]
@@ -198,6 +312,12 @@ export default function ChannelScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeft color={theme.colors.text} size={24} />
         </TouchableOpacity>
+        {isOwnChannel && (
+          <TouchableOpacity onPress={openEditModal} style={styles.editButton}>
+            <Edit3 color={theme.colors.text} size={20} />
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -253,6 +373,117 @@ export default function ChannelScreen() {
         {selectedTab === "About" && renderAbout()}
         {selectedTab === "Manage" && renderManage()}
       </ScrollView>
+
+      <Modal
+        visible={isEditModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => !isSaving && setIsEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Channel</Text>
+              <TouchableOpacity
+                onPress={() => setIsEditModalVisible(false)}
+                disabled={isSaving}
+              >
+                <X color={theme.colors.text} size={24} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Channel Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={editData.name}
+                  onChangeText={(text) => setEditData({ ...editData, name: text })}
+                  placeholder="Enter channel name"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  editable={!isSaving}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Handle *</Text>
+                <Text style={styles.formHint}>Can be changed once every 20 days</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={editData.handle}
+                  onChangeText={(text) => setEditData({ ...editData, handle: text })}
+                  placeholder="@yourhandle"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  editable={!isSaving}
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Description</Text>
+                <TextInput
+                  style={[styles.formInput, styles.formTextArea]}
+                  value={editData.description}
+                  onChangeText={(text) => setEditData({ ...editData, description: text })}
+                  placeholder="Tell viewers about your channel"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  editable={!isSaving}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Avatar URL</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={editData.avatar}
+                  onChangeText={(text) => setEditData({ ...editData, avatar: text })}
+                  placeholder="https://example.com/avatar.jpg"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  editable={!isSaving}
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Banner URL</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={editData.banner}
+                  onChangeText={(text) => setEditData({ ...editData, banner: text })}
+                  placeholder="https://example.com/banner.jpg"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  editable={!isSaving}
+                  autoCapitalize="none"
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setIsEditModalVisible(false)}
+                disabled={isSaving}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSave, isSaving && styles.modalButtonDisabled]}
+                onPress={handleEditChannel}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalButtonTextSave}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -263,10 +494,27 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "center" as const,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  editButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+  },
+  editButtonText: {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: "600" as const,
+    color: theme.colors.text,
   },
   content: {
     flex: 1,
@@ -509,5 +757,99 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.sm,
     color: theme.colors.primary,
     fontWeight: "600" as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end" as const,
+  },
+  modalContent: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: theme.radii.xl,
+    borderTopRightRadius: theme.radii.xl,
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "center" as const,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  modalTitle: {
+    fontSize: theme.fontSizes.xl,
+    fontWeight: "bold" as const,
+    color: theme.colors.text,
+  },
+  modalBody: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  formGroup: {
+    marginBottom: theme.spacing.lg,
+  },
+  formLabel: {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: "600" as const,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  formHint: {
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.xs,
+  },
+  formInput: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    fontSize: theme.fontSizes.md,
+    color: theme.colors.text,
+  },
+  formTextArea: {
+    minHeight: 100,
+    paddingTop: theme.spacing.sm,
+  },
+  modalFooter: {
+    flexDirection: "row" as const,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.lg,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    minHeight: 44,
+  },
+  modalButtonCancel: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  modalButtonSave: {
+    backgroundColor: theme.colors.primary,
+  },
+  modalButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalButtonTextCancel: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: "600" as const,
+    color: theme.colors.text,
+  },
+  modalButtonTextSave: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: "600" as const,
+    color: "#FFFFFF",
   },
 });

@@ -198,8 +198,11 @@ export default function ProfileScreen() {
       const raw = await response.text();
       console.log("[ProfileScreen] create channel response", raw.slice(0, 160));
       const data = parseChannelJson(raw);
-      if (!response.ok || !data.success || !data.channel) {
+      if (!data.success) {
         throw new Error(data.error ?? data.message ?? `Request failed with status ${response.status}`);
+      }
+      if (!data.channel) {
+        throw new Error("Channel data missing in response");
       }
       const mapped = mapChannelData(data.channel, apiBaseUrl);
       setChannelDetails(mapped);
